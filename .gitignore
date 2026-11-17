@@ -1,0 +1,39 @@
+# Data and model weights: never committed (MELD terms, size)
+data/
+*.mp4
+*.wav
+*.flac
+*.tar.gz
+*.zip
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.npy
+*.npz
+hf_cache/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Build output
+build/
+*.o
+*.so
+*.dylib
+
+# Profiler output (large; keep summaries in docs/)
+traces/
+*.trace
+*.json.gz
+
+# Secrets
+.env
+*.key
+
+# macOS
+.DS_Store
