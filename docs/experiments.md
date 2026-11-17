@@ -19,6 +19,13 @@ Each entry: hypothesis, change, result, kept or reverted, and why. Failed and mi
 - *GELU:* one thread reaches only 11.5 GB/s. That's probably limited by the math for erf, not memory, so more cores (even slow ones) keep helping. 53 GB/s at 10 threads may or may not be the memory limit. To check: STREAM-style bandwidth test in M5.
 - The 4-thread GELU p95 (9.97 ms against a 6.63 ms p50) has outliers that the other thread counts don't. Unexplained; watch for it in later runs.
 
+**Follow-up trace (Time Profiler, 100 fp32 2048×2048 matmuls, `traces/m0_Time_Profiler.trace`, not committed):**
+
+- 1626 samples landed inside Accelerate. In 99.9% of them, the innermost function was in `libBLAS.dylib`. The hottest single address accounted for 82.8% of those samples.
+- Those samples were on **only 2 threads**, even though PyTorch was set to 4 OpenMP threads. Accelerate seems to handle its own threading (it uses `libdispatch`), so `torch.set_num_threads` probably doesn't control it. That would explain why the matmul thread sweep is flat.
+- The samples are split about evenly between P-cores and E-cores (828 vs 798). So the matmul doesn't always run on P-cores.
+- libBLAS has no symbol names, so the trace can't tell whether that hot address uses SME instructions. Disassembling it with lldb failed because attaching wasn't permitted. Still open; next tries are CPU Counters or Processor Trace in M3.
+
 **Takeaway for M4:** the best thread count is per op, not global. The default (4) is a reasonable start, but the pipeline should be swept end to end, not tuned from this microbenchmark.
 
 ## E0b (M0): MPS and CPU matmul give bit-identical results. Open question.

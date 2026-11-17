@@ -47,7 +47,10 @@ From `torch.__config__.show()` and `torch.__config__.parallel_info()`:
 | `torch.profiler` + Perfetto | Works, CPU only |
 | `sample`, `spindump` (stack sampling) | Present in `/usr/bin` |
 | `powermetrics` (clocks, power, thermal) | Present, needs `sudo`, so I run it myself |
-| Instruments (Time Profiler, CPU Counters, Metal System Trace) | **Not installed.** It needs the full Xcode app; only the Command Line Tools are installed. |
+| Instruments / `xctrace` 27.2 (Xcode 27.2, build 27B52) | Works. Recorded test traces with Time Profiler and Metal System Trace. Templates available include CPU Profiler, CPU Counters, Processor Trace, Metal System Trace, Core ML and Power Profiler. Each Time Profiler sample records whether it ran on a P-core ("S Core") or an E-core. |
+| `lldb` attach | Fails ("could not pause execution"). Probably needs debugging permission (Developer Mode / `DevToolsSecurity`), a security setting I haven't changed. |
+
+Traces go in `traces/` (git-ignored). To read one from the command line, export it with `xcrun xctrace export --input X.trace --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]'`. Sample stacks are `tagged-backtrace` elements; elements are written once with an `id` and then referenced by `ref`.
 
 ## Run conditions (every benchmark)
 
