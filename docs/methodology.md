@@ -91,3 +91,12 @@ Traces go in `traces/` (git-ignored). To read one from the command line, export 
 **MPS (GPU) fp32 matmul 2048×2048**, timed with `torch.mps.synchronize()` after each call: p50 6.04 ms, 2844 GFLOP/s, 50 samples.
 
 What this run does and doesn't show is logged in `docs/experiments.md` (E0).
+
+## Dataset (M1)
+
+- MELD raw archive from https://huggingface.co/datasets/declare-lab/MELD (mirror of the official University of Michigan file). Size and sha256 are in `docs/experiments.md` (E1). Labels come from GitHub declare-lab/MELD commit `e8cedf2`.
+- License: the repo and the dataset card say GPL-3.0. The clips come from the TV series *Friends*, so clips, audio and embeddings are **never committed or published**. Only code, utterance IDs and summary metrics are.
+- Cite: Poria et al., "MELD", ACL 2019; Chen et al., "EmotionLines", arXiv:1802.08379.
+- Audio: 16 kHz mono 16-bit PCM WAV via ffmpeg 9.0.2 (`pipeline/data/extract_audio.py`). 13,715 clips in 70 s with 8 workers.
+- Rebuild everything: `scripts/m1_rebuild.sh`. Evaluation only: `python pipeline/fusion/evaluate.py`.
+- Encoders: `distilbert/distilroberta-base` (Apache-2.0, pretrained on OpenWebText) and `facebook/wav2vec2-base` (Apache-2.0, pretrained on LibriSpeech). Neither was fine-tuned on emotion data, so the MELD test set can't leak through the encoders. (`j-hartmann/emotion-english-distilroberta-base` was rejected for this reason: it was trained on several emotion datasets, including MELD.)

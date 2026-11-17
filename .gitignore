@@ -1,5 +1,5 @@
 # Data and model weights: never committed (MELD terms, size)
-data/
+/data/
 *.mp4
 *.wav
 *.flac
