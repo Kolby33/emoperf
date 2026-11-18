@@ -78,7 +78,14 @@ def main():
         from pipeline.live.web_server import EventHub, serve
         hub = EventHub()
         session.on(hub.publish)
-        serve(hub, args.port)
+        try:
+            serve(hub, args.port)
+        except OSError as e:
+            if e.errno != 48:  # EADDRINUSE on macOS
+                raise
+            raise SystemExit(f"Port {args.port} is already in use, most likely by an earlier demo that is still running "
+                             f"(closing its terminal panel doesn't always stop it). Stop it with Ctrl+C where it runs, "
+                             f"or find it with: lsof -nP -iTCP:{args.port} -sTCP:LISTEN. Or use another port: --port 8766")
         url = f"http://127.0.0.1:{args.port}"
         print(f"Web page: {url}", flush=True)
         if not args.no_browser:
