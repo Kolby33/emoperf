@@ -101,7 +101,7 @@ Fusion head 0.1 ms and response template < 0.1 ms in every run. Queue max depth 
 
 1. **Concurrency helps much less than the theory says.** The ideal concurrent time is max(A, B) ≈ 162 ms (sequential branch B). The measured result is 201–222 ms. Inference p50 improved by only 2–22 ms (1–10%), and the two concurrent runs differ from each other by 20 ms, about as much as the effect itself. p95 improved by 11–25 ms.
 2. **Why: the branches slow each other down.** Running together, the audio encoder went from 62 to 87–90 ms and ASR from 149–151 to 181–198 ms. Each branch starts its own 4-thread OpenMP team, so 8 compute threads compete for 4 P-cores (the rest land on E-cores or wait). That contention adds 39–60 ms to the critical path and cancels most of the ~62 ms we hoped to save. This is a hypothesis for M3/M4: thread sweeps (e.g. 2 + 2 threads) should test it.
-3. **The text branch is the critical path in 99–100% of segments,** and ASR is 92–94% of it. Whisper is the thing to optimize.
+3. **The text branch is the critical path in 99–100% of segments,** and ASR is 90–93% of it. Whisper is the thing to optimize.
 4. **The largest part of end-to-end latency is the 300 ms hangover,** waiting for silence to decide the utterance ended (57–60% of p50 end-to-end). Compute is about 200–225 ms of it. Cutting the hangover trades latency for more split utterances; that's an M4 experiment.
 5. **Plenty of headroom:** RTF 0.065–0.073 means the pipeline is busy only about 7% of real time, which is why the queue never backs up.
 
