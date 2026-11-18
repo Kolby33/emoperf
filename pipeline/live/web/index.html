@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmoPerf Live</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #16181d; --muted: #646b76; --line: #e3e6eb; --track: #edf0f3;
+    --accent: #2f6fde; --good: #1f8a4c; --warn: #b86e00; --bad: #c8372d;
+    --anger: #d0453a; --disgust: #6f8a2a; --fear: #7b4fc9; --joy: #d99a00;
+    --neutral: #7c8591; --sadness: #2f6fde; --surprise: #0f9b9b;
+    --wait: #c7cdd6; --model: #2f6fde; --other: #8fb4f2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --panel: #171a20; --ink: #e9ecf1; --muted: #9aa3ae; --line: #272c34; --track: #22262e;
+      --accent: #6c9cf2; --neutral: #9aa3ae; --sadness: #6c9cf2; --wait: #3a414c; --model: #6c9cf2; --other: #39527f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 14px 20px;
+           border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border-radius: 999px;
+          background: var(--track); color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.listening .dot, .pill.replaying .dot { background: var(--good); }
+  .pill.loading .dot, .pill.calibrating .dot { background: var(--warn); }
+  .pill.stopped .dot, .pill.offline .dot { background: var(--bad); }
+  .meta { color: var(--muted); font-size: 13px; }
+  main { display: grid; gap: 16px; padding: 16px 20px 32px; max-width: 1180px; margin: 0 auto;
+         grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 28px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .span2 { grid-column: 1 / -1; }
+  #now-emotion { font-size: 40px; font-weight: 700; line-height: 1.1; text-transform: capitalize; }
+  #now-prob { color: var(--muted); font-size: 15px; margin-left: 8px; font-weight: 500; }
+  #now-transcript { font-size: 18px; margin: 12px 0 6px; overflow-wrap: anywhere; }
+  #now-response { color: var(--muted); margin: 0 0 14px; overflow-wrap: anywhere; }
+  .empty { color: var(--muted); font-style: italic; }
+  .bars { display: grid; grid-template-columns: 76px minmax(0, 1fr) 44px; gap: 6px 10px; align-items: center; font-size: 13px; }
+  .bar { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 5px; transition: width .25s ease; }
+  .num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter { position: relative; height: 22px; border-radius: 6px; background: var(--track); overflow: hidden; margin: 8px 0 6px; }
+  .meter > .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--neutral); transition: width .08s linear; }
+  .meter.speaking > .fill { background: var(--good); }
+  .mark { position: absolute; top: 0; bottom: 0; width: 2px; }
+  .mark.floor { background: var(--muted); opacity: .6; }
+  .mark.thr { background: var(--warn); }
+  .scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .stats { display: flex; gap: 22px; margin-bottom: 10px; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  canvas { width: 100%; height: 180px; display: block; }
+  ol#history { list-style: none; margin: 0; padding: 0; }
+  #history li { display: grid; grid-template-columns: 56px 92px minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+                padding: 10px 0; border-top: 1px solid var(--line); }
+  #history li:first-child { border-top: 0; }
+  @media (max-width: 600px) { #history li { grid-template-columns: 48px minmax(0, 1fr) auto; }
+                              #history .chip { grid-column: 2; } #history .text { grid-column: 1 / -1; } }
+  .time, .lat { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 600;
+          text-transform: capitalize; justify-self: start; }
+  .text { overflow-wrap: anywhere; }
+  .text small { display: block; color: var(--muted); }
+  .truth { font-size: 12px; margin-left: 6px; }
+  .truth.ok { color: var(--good); } .truth.no { color: var(--bad); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px 24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EmoPerf Live</h1>
+  <span id="status" class="pill offline"><span class="dot"></span><span id="status-text">Connecting ...</span></span>
+  <span id="calib" class="meta"></span>
+  <span id="score" class="meta"></span>
+</header>
+
+<main>
+  <section class="card" aria-live="polite">
+    <h2>Latest utterance</h2>
+    <div><span id="now-emotion" class="empty">Waiting for speech</span><span id="now-prob"></span></div>
+    <p id="now-transcript"></p>
+    <p id="now-response"></p>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section class="card">
+    <h2>Input level</h2>
+    <div id="meter" class="meter" role="img" aria-label="microphone level">
+      <div class="fill" id="meter-fill"></div>
+      <div class="mark floor" id="mark-floor" title="room noise floor"></div>
+      <div class="mark thr" id="mark-thr" title="speech threshold"></div>
+    </div>
+    <div class="scale"><span>-80 dBFS</span><span>-60</span><span>-40</span><span>-20</span><span>0</span></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--muted);opacity:.6"></i>room noise</span>
+      <span><i class="sw" style="background:var(--warn)"></i>speech threshold</span>
+      <span><i class="sw" style="background:var(--good)"></i>speaking</span>
+      <span id="level-text"></span>
+    </div>
+
+    <h2 style="margin-top:22px">Latency after you stop talking</h2>
+    <div class="stats">
+      <div class="stat"><b id="p50">–</b><span>p50 end-to-end</span></div>
+      <div class="stat"><b id="p95">–</b><span>p95 end-to-end</span></div>
+      <div class="stat"><b id="m50">–</b><span>p50 model time</span></div>
+    </div>
+    <canvas id="chart" aria-label="latency per utterance"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--wait)"></i>waiting for silence</span>
+      <span><i class="sw" style="background:var(--model)"></i>models (Whisper ‖ wav2vec2)</span>
+      <span><i class="sw" style="background:var(--other)"></i>other</span>
+    </div>
+  </section>
+
+  <section class="card span2">
+    <h2>History</h2>
+    <ol id="history"><li class="empty" style="display:block">Nothing yet.</li></ol>
+  </section>
+</main>
+<footer>Runs entirely on this Mac. Whisper base.en (GPU) in parallel with wav2vec2 (CPU), fusion head, template response.</footer>
+
+<script>
+const EMOS = ["anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise"];
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+let utts = [];
+
+// probability bars
+$("bars").innerHTML = EMOS.map(e =>
+  `<span style="text-transform:capitalize">${e}</span><div class="bar"><i id="bar-${e}" style="background:var(--${e})"></i></div>` +
+  `<span class="num" id="pct-${e}">–</span>`).join("");
+
+const dbToPct = db => Math.max(0, Math.min(100, (db + 80) / 80 * 100));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const pct = (xs, q) => { const s = [...xs].sort((a, b) => a - b); const k = (s.length - 1) * q, lo = Math.floor(k);
+  return s.length ? s[lo] + (s[Math.min(lo + 1, s.length - 1)] - s[lo]) * (k - lo) : NaN; };
+
+function setStatus(state, msg) {
+  $("status").className = "pill " + state;
+  $("status-text").textContent = msg || state;
+}
+
+function showLatest(u) {
+  const el = $("now-emotion");
+  el.className = ""; el.textContent = u.emotion; el.style.color = `var(--${u.emotion})`;
+  $("now-prob").textContent = `${Math.round(u.prob * 100)}%`;
+  $("now-transcript").textContent = u.transcript ? `“${u.transcript}”` : "(no words recognized)";
+  $("now-response").textContent = u.response;
+  for (const e of EMOS) {
+    const p = u.probs[e] || 0;
+    $("bar-" + e).style.width = (p * 100).toFixed(1) + "%";
+    $("pct-" + e).textContent = Math.round(p * 100) + "%";
+  }
+}
+
+function renderHistory() {
+  const items = [...utts].reverse().map(u => {
+    const truth = u.true ? `<span class="truth ${u.true === u.emotion ? "ok" : "no"}">true: ${esc(u.true)}</span>` : "";
+    return `<li><span class="time">${u.start_s.toFixed(1)}s</span>` +
+      `<span class="chip" style="background:var(--${u.emotion})">${esc(u.emotion)}</span>` +
+      `<span class="text">${esc(u.transcript || "(no words recognized)")}${truth}<small>${esc(u.response)}</small></span>` +
+      `<span class="lat">${Math.round(u.e2e_ms)} ms</span></li>`;
+  });
+  $("history").innerHTML = items.join("") || `<li class="empty" style="display:block">Nothing yet.</li>`;
+}
+
+function renderStats() {
+  const e2e = utts.map(u => u.e2e_ms), inf = utts.map(u => u.inference_ms);
+  $("p50").textContent = e2e.length ? Math.round(pct(e2e, .5)) + " ms" : "–";
+  $("p95").textContent = e2e.length ? Math.round(pct(e2e, .95)) + " ms" : "–";
+  $("m50").textContent = inf.length ? Math.round(pct(inf, .5)) + " ms" : "–";
+  const scored = utts.filter(u => u.true);
+  $("score").textContent = scored.length ?
+    `matched MELD label: ${scored.filter(u => u.true === u.emotion).length}/${scored.length}` : "";
+}
+
+function drawChart() {
+  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const data = utts.slice(-30), padL = 40, padB = 18, padT = 8;
+  const maxV = Math.max(400, ...data.map(u => u.e2e_ms)) * 1.1;
+  const step = maxV > 1200 ? 500 : maxV > 600 ? 200 : 100;
+  g.font = "11px -apple-system, system-ui, sans-serif"; g.fillStyle = css("--muted"); g.strokeStyle = css("--line");
+  for (let v = 0; v <= maxV; v += step) {
+    const y = padT + (h - padT - padB) * (1 - v / maxV);
+    g.beginPath(); g.moveTo(padL, y); g.lineTo(w, y); g.stroke();
+    g.fillText(v + "", 4, y + 4);
+  }
+  if (!data.length) { g.fillText("Latency bars appear after the first utterance.", padL + 8, h / 2); return; }
+  const slot = (w - padL) / Math.max(data.length, 12), bw = Math.max(4, slot * 0.65);
+  data.forEach((u, i) => {
+    const x = padL + i * slot + (slot - bw) / 2;
+    const parts = [[Math.max(0, u.endpoint_ms), "--wait"], [Math.max(0, u.inference_ms), "--model"],
+                   [Math.max(0, u.e2e_ms - u.endpoint_ms - u.inference_ms), "--other"]];
+    let base = 0;
+    for (const [v, col] of parts) {
+      const y0 = padT + (h - padT - padB) * (1 - base / maxV), y1 = padT + (h - padT - padB) * (1 - (base + v) / maxV);
+      g.fillStyle = css(col); g.fillRect(x, y1, bw, y0 - y1); base += v;
+    }
+  });
+  g.fillStyle = css("--muted"); g.fillText("ms", 4, h - 4);
+}
+
+function onUtterance(u) { utts.push(u); showLatest(u); renderHistory(); renderStats(); drawChart(); }
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onopen = () => { utts = []; renderHistory(); renderStats(); drawChart(); };  // server replays history
+  es.onerror = () => setStatus("offline", "Disconnected (demo stopped?)");
+  es.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    if (ev.type === "status") setStatus(ev.state, ev.message);
+    else if (ev.type === "calibrated")
+      $("calib").textContent = `room noise ${Math.round(ev.floor_db)} dBFS · speech threshold ${Math.round(ev.threshold_db)} dBFS`;
+    else if (ev.type === "level") {
+      $("meter-fill").style.width = dbToPct(ev.db) + "%";
+      $("mark-floor").style.left = dbToPct(ev.floor_db) + "%";
+      $("mark-thr").style.left = dbToPct(ev.threshold_db) + "%";
+      $("meter").classList.toggle("speaking", ev.speaking);
+      $("level-text").textContent = `${Math.round(Math.max(ev.db, -99))} dBFS${ev.speaking ? " · speaking" : ""}`;
+    } else if (ev.type === "utterance") onUtterance(ev);
+  };
+}
+window.addEventListener("resize", drawChart);
+drawChart(); connect();
+</script>
+</body>
+</html>

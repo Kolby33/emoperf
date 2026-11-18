@@ -1,8 +1,10 @@
 # Live demo
 
 ```bash
-.venv/bin/python demo.py
+.venv/bin/python demo.py --web
 ```
+
+This opens a local page at http://127.0.0.1:8765 (only reachable from this Mac) showing the input level against the room-noise floor and speech threshold, the latest emotion with all 7 probabilities, a latency chart that splits each utterance into *waiting for silence* and *model time*, and a history. Without `--web` the same information prints in the terminal. In web mode the page stays up after the session ends, until Ctrl+C.
 
 1. The models load (about 10 s), then the demo asks you to **stay quiet for 1 second** while it measures the room noise. It prints the noise level and the resulting speech threshold.
 2. Speak a sentence, then pause. About 0.35 s after you stop, it prints what it heard, the emotion (with the runner-up), a response, and the latency.
@@ -10,7 +12,7 @@
 
 The first time, macOS asks whether the app running Python (Terminal, or the Claude app's terminal) may use the microphone. If you said no earlier, turn it on in System Settings → Privacy & Security → Microphone.
 
-**Without a microphone:** `--source meld --n 8` replays 8 MELD test clips in real time and prints the true label next to each prediction. `--source file --file x.wav` plays a 16 kHz mono WAV.
+**Without a microphone:** `--web --source meld --n 14` replays 8 MELD test clips in real time and prints the true label next to each prediction. `--source file --file x.wav` plays a 16 kHz mono WAV.
 
 **Useful flags:** `--margin-db 15` if background noise triggers false utterances (default 12), `--hangover 0.3` if it cuts you off mid-sentence (default 0.2 s), `--device N` for another microphone (list them with `python -c "import sounddevice; print(sounddevice.query_devices())"`).
 

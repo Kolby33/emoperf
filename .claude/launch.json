@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-demo-meld",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["demo.py", "--web", "--no-browser", "--source", "meld", "--n", "14"],
+      "port": 8765
+    }
+  ]
+}
