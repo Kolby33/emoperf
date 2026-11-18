@@ -188,7 +188,8 @@ def main():
     report = {
         "benchmark": "m2_live", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "config": {**vars(cfg), "n": args.n, "threads": args.threads, "interop_threads": torch.get_num_interop_threads(),
-                   "head": str(args.head), "opts": json.loads(args.opts), "asr_model": stages.asr_model_name, "device": "cpu"},
+                   "head": str(args.head), "opts": json.loads(args.opts), "asr_model": stages.asr_model_name,
+                   "device": str(stages.device), "asr_device": str(stages.asr_dev), "audio_device": str(stages.audio_dev)},
         "env": {"torch": torch.__version__, "transformers": transformers.__version__,
                 "python": platform.python_version(), "macos": platform.mac_ver()[0],
                 "git_commit": sh(["git", "rev-parse", "--short", "HEAD"]),
