@@ -1,0 +1,13 @@
+window: last 30 s, 6619 samples from 'python', 5734 compute samples
+compute samples on P-cores: 4116 (71.8%), E-cores: 1618 (28.2%)
+distinct threads doing compute: 13
+compute threads running at once (in busy 1 ms bins): mean 2.64, p50 2, p95 5, max 8
+  histogram: {1: 783, 2: 466, 3: 213, 4: 320, 5: 312, 6: 49, 7: 10, 8: 22}
+busy 1 ms bins: 2175 (7.2% of window)
+innermost library of compute samples (libomp leaf = OpenMP runtime itself, mostly spin-waiting):
+  libBLAS.dylib                  3199 (55.8%)  of which on E-cores 787
+  libtorch_cpu.dylib             2337 (40.8%)  of which on E-cores 760
+  libsystem_kernel.dylib           98 ( 1.7%)  of which on E-cores 33
+  libsystem_malloc.dylib           23 ( 0.4%)  of which on E-cores 3
+  libomp.dylib                     17 ( 0.3%)  of which on E-cores 10
+  libc10.dylib                     16 ( 0.3%)  of which on E-cores 2

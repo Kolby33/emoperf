@@ -1,0 +1,195 @@
+{
+ "n": 30,
+ "threads": 4,
+ "torch": "2.15.0",
+ "timestamp": "2026-11-18T13:15:19",
+ "peak_rss_mb": 4643.782656,
+ "stage_share_under_profiler": {
+  "asr_encoder": {
+   "ms": 2749.1994609999983,
+   "share": 0.41107541776325046
+  },
+  "asr_decode": {
+   "ms": 2267.395709999997,
+   "share": 0.3390334720871136
+  },
+  "audio_enc": {
+   "ms": 1319.9017850000012,
+   "share": 0.19735897135596586
+  },
+  "text_enc": {
+   "ms": 288.35759900000016,
+   "share": 0.043116813514511666
+  },
+  "asr_feat": {
+   "ms": 55.8569829999988,
+   "share": 0.00835204318473395
+  },
+  "audio_feat": {
+   "ms": 4.040871999999747,
+   "share": 0.0006042133970605046
+  },
+  "fusion": {
+   "ms": 3.0701700000022245,
+   "share": 0.000459068697364012
+  }
+ },
+ "top_ops_by_self_cpu": [
+  {
+   "op": "aten::addmm",
+   "self_ms": 2413.44096600005,
+   "share": 0.3804743220087677,
+   "calls": 18678
+  },
+  {
+   "op": "aten::_scaled_dot_product_flash_attention_for_cpu",
+   "self_ms": 1309.826652999991,
+   "share": 0.2064916502081015,
+   "calls": 4788
+  },
+  {
+   "op": "aten::mm",
+   "self_ms": 731.0967689999715,
+   "share": 0.11525599814818879,
+   "calls": 2733
+  },
+  {
+   "op": "aten::_slow_conv2d_forward",
+   "self_ms": 430.919336999974,
+   "share": 0.0679336038856023,
+   "calls": 750
+  },
+  {
+   "op": "aten::sort",
+   "self_ms": 271.33824399999077,
+   "share": 0.042775951794689106,
+   "calls": 1017
+  },
+  {
+   "op": "aten::gelu",
+   "self_ms": 255.01096699998328,
+   "share": 0.04020198800840146,
+   "calls": 3084
+  },
+  {
+   "op": "aten::copy_",
+   "self_ms": 218.17113399996262,
+   "share": 0.034394259258843644,
+   "calls": 31353
+  },
+  {
+   "op": "aten::add",
+   "self_ms": 120.94771399995705,
+   "share": 0.019067174267333224,
+   "calls": 9168
+  },
+  {
+   "op": "aten::index_select",
+   "self_ms": 82.71306999998914,
+   "share": 0.01303955624888028,
+   "calls": 459
+  },
+  {
+   "op": "aten::native_layer_norm",
+   "self_ms": 68.16263300005141,
+   "share": 0.010745707867886782,
+   "calls": 8061
+  },
+  {
+   "op": "aten::cat",
+   "self_ms": 42.80285199996953,
+   "share": 0.006747787215081893,
+   "calls": 5655
+  },
+  {
+   "op": "aten::isin",
+   "self_ms": 42.46452400002832,
+   "share": 0.006694450457229656,
+   "calls": 1047
+  }
+ ],
+ "top_op_shapes": [
+  {
+   "op": "aten::_scaled_dot_product_flash_attention_for_cpu",
+   "shapes": "[[1, 8, 1500, 64], [1, 8, 1500, 64], [1, 8, 1500, 64], [], [], [], []]",
+   "self_ms": 1049.2375950000092,
+   "calls": 180
+  },
+  {
+   "op": "aten::addmm",
+   "shapes": "[[512], [1500, 512], [512, 512], [], []]",
+   "self_ms": 424.4218700000053,
+   "calls": 720
+  },
+  {
+   "op": "aten::addmm",
+   "shapes": "[[2048], [1500, 512], [512, 2048], [], []]",
+   "self_ms": 410.4166040000042,
+   "calls": 180
+  },
+  {
+   "op": "aten::mm",
+   "shapes": "[[1, 512], [512, 51864]]",
+   "self_ms": 399.07391799999624,
+   "calls": 309
+  },
+  {
+   "op": "aten::addmm",
+   "shapes": "[[512], [1500, 2048], [2048, 512], [], []]",
+   "self_ms": 356.92413900001054,
+   "calls": 180
+  },
+  {
+   "op": "aten::sort",
+   "shapes": "[[51954], [], [], []]",
+   "self_ms": 257.0922099999921,
+   "calls": 339
+  },
+  {
+   "op": "aten::mm",
+   "shapes": "[[1500, 512], [512, 512]]",
+   "self_ms": 207.08114199999795,
+   "calls": 360
+  },
+  {
+   "op": "aten::_scaled_dot_product_flash_attention_for_cpu",
+   "shapes": "[[1, 8, 1, 64], [1, 8, 1500, 64], [1, 8, 1500, 64], [], [], [], []]",
+   "self_ms": 159.31227599998277,
+   "calls": 1854
+  },
+  {
+   "op": "aten::gelu",
+   "shapes": "[[1, 1500, 2048], []]",
+   "self_ms": 134.31182000000675,
+   "calls": 180
+  },
+  {
+   "op": "aten::addmm",
+   "shapes": "[[512], [1, 512], [512, 512], [], []]",
+   "self_ms": 129.39640499997313,
+   "calls": 9270
+  }
+ ],
+ "decode_gap": {
+  "regions": 30,
+  "wall_ms_total": 2267.39571,
+  "op_covered_ms_total": 2024.9705649414063,
+  "uncovered_fraction": 0.10691788115740664,
+  "top_level_ops_per_region_mean": 3416.8
+ },
+ "no_profiler": {
+  "asr_encoder_ms_p50": 92.7031250030268,
+  "asr_encoder_ms_min_max": [
+   91.69766603736207,
+   97.907374962233
+  ],
+  "asr_decode_ms_p50": 63.57237551128492,
+  "decode_ms_per_token_p50": 7.067769781860989,
+  "tokens_p50": 9.0,
+  "audio_branch_ms_p50": 42.446250503417104,
+  "corr_duration_vs_asr_encoder": 0.0649996304597563,
+  "corr_duration_vs_audio_branch": 0.990819859377816,
+  "duration_s_p50": 2.52234375,
+  "padding_fraction_p50": 0.915921875
+ }
+}

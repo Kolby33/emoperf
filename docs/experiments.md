@@ -121,3 +121,51 @@ Fusion head 0.1 ms and response template < 0.1 ms in every run. Queue max depth 
 - H1: Whisper's encoder always processes a 30 s padded input (3000 mel frames), even for a 2.5 s utterance, so most of its encoder compute goes to padding.
 - H2: In concurrent mode, OpenMP oversubscription (2 × 4 threads on 4 P-cores) is what slows both branches.
 - H3: Whisper's token-by-token decode loop has significant Python overhead per token, which also holds the GIL and slows the other branch.
+
+## E4 (M3): Profiling — the top three hotspots
+
+**Setup:** `python bench/profile_stages.py --n 30` (torch.profiler, CPU activities, `record_shapes`, `profile_memory`) over the first 30 utterances of the fixed subset, using ground-truth clips with every stage run sequentially and 4 threads. Whisper is split into its encoder call and its decode loop (`generate` with precomputed `encoder_outputs`); the token IDs are asserted identical to a plain `generate` on all 30 clips. Chrome trace in `traces/m3_profile.json` (350 MB, git-ignored; open in Perfetto). Summary in `bench/results/m3_profile.json`; per-region breakdown in `bench/results/m3_trace_breakdown.txt` (`bench/analyze_trace.py`). Instruments Time Profiler traces of 10-utterance live runs: `bench/results/m3_xctrace_{sequential,concurrent}.txt` (`bench/analyze_xctrace.py`).
+
+Profiler overhead: profiled Whisper encoder time per clip (91.6 ms) is close to the unprofiled 92.7 ms, but the decode loop is inflated (75.6 vs 63.6 ms, about 19%) because it's made of many small ops. Shares below are under the profiler; the ms values marked "no profiler" are not.
+
+**Where the time goes (share of profiled stage time):** Whisper encoder 41.1%, Whisper decode 33.9%, wav2vec2 audio encoder 19.7%, text encoder 4.3%, Whisper feature extraction 0.8%, fusion head < 0.1%.
+
+### Hotspot 1: Whisper encoder runs on 30 s of input, about 92% of it padding (H1: confirmed)
+
+- Every clip goes in as `(1, 80, 3000)` mel frames and comes out as `(1, 1500, 512)`, whatever its length. The median clip is 2.52 s, so the median input is 91.6% padding.
+- No profiler: encoder 92.7 ms p50 (range 91.7–97.9 ms) on clips from 0.6 to about 8 s. **Correlation between clip length and encoder time: r = 0.06.** For comparison, the wav2vec2 branch, which only sees the real audio, has r = 0.99.
+- Inside the encoder: `addmm` (linear layers on `[1500, 512]` activations) 39.9%, and attention `_scaled_dot_product_flash_attention_for_cpu` on `[1, 8, 1500, 64]` 38.5%. That one (op, shape) pair, 180 calls, is the single most expensive in the whole profile: 1049 ms.
+- **Hypothesis for M4:** feeding the encoder only the real frames (rounded up to some bucket) would make its time scale with clip length. Attention cost grows with length², so it would shrink even faster. Risks: Whisper was trained on 30 s windows and has a fixed 1500-position embedding, and the HF implementation checks the input length. This needs a code change plus a WER and F1 check, not just a flag.
+
+### Hotspot 2: Whisper decode loop, about 7 ms per token (H3 as stated: refuted; a different cause found)
+
+- No profiler: decode 63.6 ms p50 for a median of 9 tokens, **7.1 ms per token.**
+- H3 said the gaps between ops (Python / `generate` overhead) dominate. **They don't:** top-level aten ops cover 89.3% of decode wall time; only 10.7% is gaps. On average each clip's decode runs 3417 top-level ops.
+- What the time actually is (decode op self time, 2025 ms):
+  - `aten::mm` 31.1%, mostly the logits projection `[1, 512] × [512, 51864]` (399 ms for 309 calls), done once per token over the whole vocabulary.
+  - `aten::addmm` 25.3% from 14,418 tiny calls (`[1, 512] × [512, 512]` and similar).
+  - **`aten::sort` 13.4% + `isin` 2.1% + `_unique` 1.1%** come from Hugging Face's Whisper logits processors. On every step, they call `torch.isin(vocab_tensor, ...)` over the full 51,864-token vocabulary, once against the 90 suppressed tokens (`SuppressTokensLogitsProcessor`, `transformers/generation/logits_process.py:1945`) and once against a 2-token set. `isin` sorts the whole vocabulary through `_unique`. The mask is the same every step, but it's rebuilt 339 times for 30 clips: about 1 ms per token.
+- The decode loop mostly doesn't use the 4 threads: in the sequential Time Profiler trace, 1199 of 2241 busy 1 ms bins had only one compute thread running.
+- **Hypotheses for M4:** compute the suppress mask once (expected about −1 ms per token, same tokens out); fewer intra-op threads for the decode, which is too small to split well.
+
+### Hotspot 3: In concurrent mode the two branches fight for P-cores (H2: supported)
+
+From Instruments Time Profiler (about 1 sample per ms per running thread; last 30 s of a 10-utterance live run, i.e. the streamed part):
+
+| | Sequential | Concurrent |
+|---|---|---|
+| Distinct threads doing compute | 6 | 13 |
+| Compute threads running at once, p95 / max | 4 / 4 | 5 / 8 |
+| Compute samples on E-cores | 13.5% | 28.2% |
+| Total compute samples (same 10 clips) | 4630 | 5734 (+24%) |
+| Accelerate BLAS samples on E-cores | 408 | 787 |
+
+- Each branch thread starts its own 4-thread OpenMP team, so up to 8 compute threads run on a 4-P-core chip. The extra threads land on E-cores, and the same matmuls cost more CPU time. That explains why each branch got slower in E3 (audio encoder 62 → 87–90 ms, ASR 149–151 → 181–198 ms) and why concurrency saved so little.
+- **OpenMP spin-waiting isn't the cause:** the OpenMP runtime is the innermost library in only 0.3% of compute samples; 55–56% are inside Accelerate BLAS and 41% inside libtorch.
+- **Hypothesis for M4:** split the budget (for example 2 + 2 threads, or ASR 3 + audio 1) so the two branches together fit on the 4 P-cores.
+
+### Smaller finding: wav2vec2's convolutions use PyTorch's generic fallback
+
+`aten::_slow_conv2d_forward` is 28.1% of the audio encoder's op time. The shapes are wav2vec2's 1-D feature-encoder convolutions (e.g. `[1, 512, 1, 23618] * [512, 512, 1, 3]`, size growing with the clip) plus Whisper's two input convolutions. This PyTorch build has no oneDNN (`USE_MKLDNN=OFF`, see M0), so convolutions run on the generic path. It's a candidate for ONNX Runtime or Core ML in M4.
+
+**Memory:** peak RSS during the profiled run was 4.6 GB, but `profile_memory` and `record_shapes` inflate this. It isn't a pipeline number; M4 measures memory without the profiler.

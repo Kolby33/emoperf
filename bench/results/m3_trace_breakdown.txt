@@ -1,0 +1,45 @@
+region asr_decode: wall 2267.4 ms, op self time 2025.0 ms
+  aten::mm                                                629.4 ms  31.1%  calls 2553
+  aten::addmm                                             512.4 ms  25.3%  calls 14418
+  aten::sort                                              271.3 ms  13.4%  calls 1695
+  aten::_scaled_dot_product_flash_attention_for_cpu       208.6 ms  10.3%  calls 4068
+  aten::copy_                                              66.6 ms   3.3%  calls 24693
+  aten::isin                                               42.5 ms   2.1%  calls 1047
+  aten::cat                                                36.3 ms   1.8%  calls 5535
+  aten::arange                                             34.2 ms   1.7%  calls 4746
+  aten::_unique                                            21.6 ms   1.1%  calls 678
+  aten::transpose                                          20.8 ms   1.0%  calls 53943
+  aten::linear                                             19.3 ms   1.0%  calls 16971
+  aten::native_layer_norm                                  16.9 ms   0.8%  calls 6441
+  aten::as_strided                                         10.9 ms   0.5%  calls 80220
+  aten::index_copy_                                        10.8 ms   0.5%  calls 339
+
+shapes of aten::_slow_conv2d_forward by self time:
+      54.7 ms  [[1, 512, 1, 3000], [512, 512, 1, 3], [], [512], [], []]
+      16.7 ms  [[1, 80, 1, 3000], [512, 80, 1, 3], [], [512], [], []]
+      12.9 ms  [[1, 512, 1, 23618], [512, 512, 1, 3], [], [], [], []]
+      10.6 ms  [[1, 512, 1, 20016], [512, 512, 1, 3], [], [], [], []]
+       8.5 ms  [[1, 512, 1, 15879], [512, 512, 1, 3], [], [], [], []]
+       8.3 ms  [[1, 512, 1, 7736], [512, 512, 1, 3], [], [], [], []]
+       7.1 ms  [[1, 512, 1, 13211], [512, 512, 1, 3], [], [], [], []]
+       6.5 ms  [[1, 512, 1, 11967], [512, 512, 1, 3], [], [], [], []]
+       6.5 ms  [[1, 512, 1, 11808], [512, 512, 1, 3], [], [], [], []]
+       6.5 ms  [[1, 512, 1, 11739], [512, 512, 1, 3], [], [], [], []]
+region asr_encoder: wall 2749.2 ms, op self time 2723.6 ms
+  aten::addmm                                            1086.1 ms  39.9%  calls 900
+  aten::_scaled_dot_product_flash_attention_for_cpu      1049.2 ms  38.5%  calls 180
+  aten::gelu                                              149.4 ms   5.5%  calls 240
+  aten::copy_                                             111.6 ms   4.1%  calls 2250
+  aten::add                                               103.4 ms   3.8%  calls 390
+  aten::mm                                                101.7 ms   3.7%  calls 180
+  aten::_slow_conv2d_forward                               71.5 ms   2.6%  calls 60
+  aten::native_layer_norm                                  29.0 ms   1.1%  calls 390
+region audio_enc: wall 1319.9 ms, op self time 1281.3 ms
+  aten::addmm                                             656.8 ms  51.3%  calls 2190
+  aten::_slow_conv2d_forward                              359.5 ms  28.1%  calls 690
+  aten::gelu                                               97.6 ms   7.6%  calls 600
+  aten::_scaled_dot_product_flash_attention_for_cpu        47.4 ms   3.7%  calls 360
+  aten::copy_                                              32.3 ms   2.5%  calls 2760
+  aten::native_layer_norm                                  16.6 ms   1.3%  calls 780
+  aten::_weight_norm_interface                             16.1 ms   1.3%  calls 30
+  aten::add                                                11.9 ms   0.9%  calls 750
