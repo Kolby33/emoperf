@@ -66,3 +66,37 @@ def test_open_segment_closed_by_flush():
     x = np.concatenate([silence(0.2), tone(0.5)])
     segs = run(EnergySegmenter(), x)
     assert len(segs) == 1 and not segs[0].forced
+
+
+# ---- adaptive noise floor (live microphone mode) ----
+
+def test_adaptive_off_by_default_keeps_fixed_threshold():
+    s = EnergySegmenter(threshold_db=-55.0)
+    run(s, np.concatenate([silence(1.0, db=-40.0), tone(0.5)]))
+    assert s.current_threshold_db() == -55.0
+
+
+def test_fixed_threshold_fails_in_noisy_room():
+    # room noise at -40 dBFS is above the fixed -55 threshold: everything looks like speech
+    x = np.concatenate([silence(1.0, db=-40.0), tone(0.8, db=-20.0), silence(1.0, db=-40.0), tone(0.8, db=-20.0),
+                        silence(1.0, db=-40.0)])
+    assert len(run(EnergySegmenter(threshold_db=-55.0), x)) == 1  # one giant segment
+
+
+def test_adaptive_finds_utterances_in_noisy_room():
+    x = np.concatenate([silence(1.0, db=-40.0), tone(0.8, db=-20.0), silence(1.0, db=-40.0, seed=1),
+                        tone(0.8, db=-20.0), silence(1.0, db=-40.0, seed=2)])
+    s = EnergySegmenter(threshold_db=-55.0, adaptive=True, margin_db=12.0)
+    assert abs(s.calibrate(silence(1.0, db=-40.0, seed=3)) - (-40.0)) < 1.0
+    segs = run(s, x)
+    assert len(segs) == 2
+    assert abs(segs[0].start - SR) <= 320 and abs(segs[0].end - int(1.8 * SR)) <= 320
+
+
+def test_adaptive_floor_tracks_slow_noise_change_and_is_capped():
+    s = EnergySegmenter(threshold_db=-55.0, adaptive=True, floor_window_s=1.0, max_floor_db=-30.0)
+    s.calibrate(silence(0.5, db=-60.0))
+    run(s, silence(3.0, db=-45.0))          # room gets louder, no speech
+    assert abs(s.noise_floor_db - (-45.0)) < 2.0
+    run(s, silence(3.0, db=-10.0))          # very loud: floor must stop at the cap
+    assert s.noise_floor_db <= -30.0 + 1e-9
