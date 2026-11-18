@@ -29,13 +29,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pipeline.fusion.model import EMOTIONS, FusionHead  # noqa: E402
 
 
-def load(split, emb_dir, index_dir):
+TEXT_FILES = {"gold": "{split}_text.npy", "asr": "{split}_text_asr.npy"}
+
+
+def load(split, emb_dir, index_dir, text="gold"):
+    """text: 'gold' (MELD transcript), 'asr' (Whisper transcript), or 'both' (rows stacked: gold then asr)."""
     idx = pd.read_csv(index_dir / f"{split}.csv", keep_default_na=False)
-    t = torch.from_numpy(np.load(emb_dir / f"{split}_text.npy").astype(np.float32))
     a = torch.from_numpy(np.load(emb_dir / f"{split}_audio.npy").astype(np.float32))
     y = torch.tensor(idx.label.values)
-    assert len(t) == len(a) == len(y), split
-    return t, a, y
+    kinds = ["gold", "asr"] if text == "both" else [text]
+    ts = [torch.from_numpy(np.load(emb_dir / TEXT_FILES[k].format(split=split)).astype(np.float32)) for k in kinds]
+    for t in ts:
+        assert len(t) == len(a) == len(y), split
+    return torch.cat(ts), a.repeat(len(ts), 1, 1), y.repeat(len(ts))
 
 
 def metrics(y, p):
@@ -92,11 +98,19 @@ def main():
     ap.add_argument("--patience", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--batch-size", type=int, default=128)
+    ap.add_argument("--train-text", choices=["gold", "asr", "both"], default="gold")
+    ap.add_argument("--dev-text", choices=["gold", "asr"], default="gold", help="text used for model selection")
+    ap.add_argument("--tag", default="", help="suffix for model file names, e.g. _trainasr")
     args = ap.parse_args()
     torch.set_num_threads(4)
     args.models_dir.mkdir(parents=True, exist_ok=True)
 
-    data = {s: load(s, args.emb_dir, args.index_dir) for s in ("train", "dev", "test")}
+    data = {"train": load("train", args.emb_dir, args.index_dir, args.train_text),
+            "dev": load("dev", args.emb_dir, args.index_dir, args.dev_text),
+            "test": load("test", args.emb_dir, args.index_dir, "gold")}
+    has_asr = (args.emb_dir / "test_text_asr.npy").exists()
+    if has_asr:
+        data["test_asr"] = load("test", args.emb_dir, args.index_dir, "asr")
     _, _, test_y = data["test"]
 
     train_y = data["train"][2]
@@ -118,34 +132,45 @@ def main():
             tt, ta, _ = data["test"]
             run = {"seed": seed, "best_epoch": best_epoch, "train_seconds": round(time.perf_counter() - t0, 1),
                    "dev": metrics(dy, predict(model, dt, da)), "test": metrics(test_y, predict(model, tt, ta))}
+            if has_asr:
+                qt, qa, _ = data["test_asr"]
+                run["test_asr"] = metrics(test_y, predict(model, qt, qa))
             if model.text_mix is not None:
                 run["text_layer_weights"] = torch.softmax(model.text_mix.logits, 0).tolist()
             if model.audio_mix is not None:
                 run["audio_layer_weights"] = torch.softmax(model.audio_mix.logits, 0).tolist()
-            torch.save({"mode": mode, "state_dict": model.state_dict()},
-                       args.models_dir / f"fusion_{mode.replace('+', '_')}_seed{seed}.pt")
+            torch.save({"mode": mode, "state_dict": model.state_dict(), "train_text": args.train_text},
+                       args.models_dir / f"fusion_{mode.replace('+', '_')}{args.tag}_seed{seed}.pt")
             runs.append(run)
+            asr = f"  test(ASR) wF1 {run['test_asr']['weighted_f1']:.4f}" if has_asr else ""
             print(f"{mode:>10} seed {seed}: epoch {best_epoch:2d}  dev wF1 {run['dev']['weighted_f1']:.4f}  "
-                  f"test wF1 {run['test']['weighted_f1']:.4f}  macro {run['test']['macro_f1']:.4f}  "
+                  f"test(gold) wF1 {run['test']['weighted_f1']:.4f}  macro {run['test']['macro_f1']:.4f}{asr}  "
                   f"({run['train_seconds']}s)")
         summary = {}
-        for m in ("weighted_f1", "macro_f1", "accuracy"):
-            vals = [r["test"][m] for r in runs]
-            summary[m] = {"mean": float(np.mean(vals)), "std": float(np.std(vals))}
-        report["runs"][mode] = {"seeds": runs, "test_summary": summary}
+        for split_key, name in (("test", "test_summary"), ("test_asr", "test_asr_summary")):
+            if split_key not in runs[0]:
+                continue
+            summary[name] = {m: {"mean": float(np.mean([r[split_key][m] for r in runs])),
+                                 "std": float(np.std([r[split_key][m] for r in runs]))}
+                             for m in ("weighted_f1", "macro_f1", "accuracy")}
+        report["runs"][mode] = {"seeds": runs, **summary}
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2))
 
+    report["train_text"], report["dev_text"] = args.train_text, args.dev_text
     mb = report["majority_baseline_test"]
-    print(f"\nTest set (n={len(test_y)}), mean ± std over seeds {args.seeds}")
-    print(f"{'model':>16} {'weighted F1':>14} {'macro F1':>14} {'accuracy':>14}")
-    print(f"{'majority (' + mb['class'] + ')':>16} {mb['weighted_f1']:>14.4f} {mb['macro_f1']:>14.4f} "
-          f"{mb['accuracy']:>14.4f}")
+    print(f"\nTest set (n={len(test_y)}), mean ± std over seeds {args.seeds}; "
+          f"trained on {args.train_text} text, selected on {args.dev_text} dev text")
+    print(f"{'model':>22} {'weighted F1':>16} {'macro F1':>16} {'accuracy':>16}")
+    print(f"{'majority (' + mb['class'] + ')':>22} {mb['weighted_f1']:>16.4f} {mb['macro_f1']:>16.4f} "
+          f"{mb['accuracy']:>16.4f}")
     for mode, r in report["runs"].items():
-        s = r["test_summary"]
-        print(f"{mode:>16} " + " ".join(f"{s[m]['mean']:>7.4f} ± {s[m]['std']:.4f}"
-                                        for m in ("weighted_f1", "macro_f1", "accuracy")))
+        for key, label in (("test_summary", "gold"), ("test_asr_summary", "ASR")):
+            if key in r:
+                s = r[key]
+                print(f"{mode + ' / test ' + label:>22} " + " ".join(f"{s[m]['mean']:>8.4f} ± {s[m]['std']:.4f}"
+                                                                  for m in ("weighted_f1", "macro_f1", "accuracy")))
     print(f"wrote {args.out}")
 
 

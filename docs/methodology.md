@@ -121,3 +121,9 @@ What this run does and doesn't show is logged in `docs/experiments.md` (E0).
 - Memory: peak process RSS (`ru_maxrss`) plus `torch.mps.driver_allocated_memory()` for MPS variants, because RSS doesn't count Metal allocations.
 - Extra packages for M4 (in `.venv` only): onnxruntime 1.32.0, onnx 1.23.2, onnxscript 0.7.2. ONNX files in `data/onnx/` (git-ignored).
 - Final live configuration: `bench/m4_live_runs.sh` (`--opts '{"asr_device": "mps", "mask_cache": true}' --mode concurrent --hangover 0.2`).
+
+## ASR-text training (E7)
+
+- Whisper transcripts of every split: `python pipeline/embed/cache_asr.py` (data in git-ignored `data/asr/` and `data/emb/*_text_asr.npy`).
+- Heads: `python pipeline/fusion/train.py --modes text+audio text --train-text {gold,asr,both} --dev-text {gold,asr} --tag _X --out bench/results/acc_train_X.json`. Every run is tested on both gold and Whisper text.
+- `bench/run_live.py --pace 0` is valid for accuracy only (latency numbers are meaningless), and only because the ring buffer is sized to the whole stream at pace 0. Runs with any ring overrun abort.

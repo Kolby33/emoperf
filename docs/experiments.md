@@ -260,3 +260,54 @@ No setting merged two utterances (the 0.8 s gaps are longer than any hangover). 
 - **End-to-end p50: 525 → 328 ms (−37%); p95: 641 → 366–372 ms (−42 to −43%).** 86–97 ms comes from compute (inference p50 224 → 126–138 ms) and 100 ms from the shorter hangover.
 - Accuracy is unchanged. The 0.2 s hangover split one more utterance (91 / 8 / 1), but the weighted F1 on these 100 is the same (0.503); WER went 0.315 → 0.318.
 - **Open question:** in the live stream, MPS ASR p50 is 105–114 ms, but offline (back-to-back clips) it's 72 ms. Not measured yet. One hypothesis: the GPU slows its clock during the ~3.5 s idle gaps between utterances, so each utterance starts on a "cold" GPU. Checking that needs `powermetrics` (sudo), so I'd run it with you. Because of this, the live speedup (1.6–1.8× on inference) is smaller than the offline one (2.4×). The README should quote the live number for latency.
+
+## E7: Where live accuracy is lost, and training on Whisper's text
+
+### Step 1: ASR vs segmentation
+
+Three conditions with the same head (`fusion_text_audio_seed0`, gold-trained) on the same utterances: gold text + true boundaries, Whisper text + true boundaries, Whisper text + energy segmenter (the live pipeline).
+
+| Utterances | Gold + oracle | Whisper + oracle | Whisper + segmenter (live) | ASR cost | Segmentation cost |
+|---|---|---|---|---|---|
+| first 100 of the fixed subset (E3/E5 data) | 0.599 | 0.497 | 0.503 | −0.102 | +0.006 |
+| all 500 of the fixed subset | 0.623 | 0.537 | 0.528 | −0.086 | −0.010 |
+| full test set (2610, mean of 3 seeds) | 0.613 | 0.516 | — | −0.097 | — |
+
+- **Whisper's errors are most of the loss.** On 100 utterances segmentation looked free; on 500 it costs about 0.01 (and 0.024 for the mixed head below). The 100-utterance conclusion was too strong: one utterance is 1% there.
+- Segmentation on the 500-utterance stream (hangover 0.2 s): 432 utterances got exactly one segment, 55 were split, 13 missed (2.6%). On the first 100: 91 / 8 / 1.
+
+### Step 2: train the head on the text it will see
+
+**Hypothesis:** the head is trained on clean MELD transcripts but used on Whisper's (test WER 0.311), so training on Whisper text removes a train/test mismatch.
+
+**Change:** `pipeline/embed/cache_asr.py` transcribes every utterance with the live code path (Whisper base.en on MPS, mask cache, greedy), on ground-truth clips. 13,692 utterances in 24 min, no empty transcripts. WER vs MELD transcripts: train 0.354, dev 0.299, test 0.311. Text embeddings cached as `data/emb/{split}_text_asr.npy`. Same head, same hyperparameters, 3 seeds; trained on gold, Whisper, or both (rows stacked), and selected on dev with the matching text (Whisper text for the two new heads). Raw data: `bench/results/acc_train_{gold,asr,both}.json`.
+
+**Result, full test set (n = 2610), text+audio head, mean ± std over seeds 0–2:**
+
+| Trained on | Test, gold text | Test, Whisper text | Macro F1, Whisper text |
+|---|---|---|---|
+| gold (M1) | 0.6133 ± 0.0082 | 0.5160 ± 0.0043 | 0.3446 ± 0.0065 |
+| Whisper | 0.5749 ± 0.0096 | 0.5260 ± 0.0066 | 0.3508 ± 0.0108 |
+| **both** | 0.6032 ± 0.0012 | **0.5288 ± 0.0028** | **0.3553 ± 0.0080** |
+
+Paired bootstrap over test utterances (2000 resamples, ΔwF1 averaged over the 3 seeds; `bench/results/acc_bootstrap.json`):
+- both vs gold-trained, Whisper text: **+0.0127, 95% CI [+0.0039, +0.0216]**, P(Δ ≤ 0) = 0.004. **Real, but small.**
+- Whisper-only vs gold-trained: +0.0099, 95% CI [−0.0019, +0.0215]. Not claimed.
+- Training on Whisper only costs 0.039 on gold text. Mixing keeps most of the clean-text performance (−0.010) and gets the Whisper-text gain.
+
+**Through the live pipeline** (500 utterances, energy segmenter, hangover 0.2 s, best M4 config, seed-0 heads chosen in advance; `bench/results/acc_live_{gold,trainboth}_n500_pace0.json`):
+
+| Head | Live weighted F1 | Live macro F1 | Live accuracy |
+|---|---|---|---|
+| gold-trained | 0.528 | 0.323 | 54.6% |
+| both | 0.534 | 0.343 | 55.8% |
+
+With true boundaries, the mixed head is +0.021 on these 500 (0.558 vs 0.537); live it's only +0.006. Part of the gain is lost on split utterances, where each piece's transcript is incomplete. That's an untested explanation.
+
+**Other finding:** with Whisper text, audio contributes more. Text+audio beats text-only by +0.017 (gold-trained) and +0.023 (mixed) on Whisper-text test, against +0.009 on gold text (within seed noise, E2). When the words are unreliable, the head leans on tone of voice.
+
+**Conclusion:** keep the mixed head (`fusion_text_audio_trainboth_seed0.pt`) for the live pipeline. It recovers about 13% of the ASR gap on the full test set. Most of the gap is information Whisper didn't capture, so the next lever is the ASR itself (e.g. a larger Whisper, at a latency cost) or more context, not the head.
+
+### A failed run, kept for the record
+
+The first 500-utterance live runs used `--pace 0` (no real-time pacing) to save time, assuming pace doesn't affect accuracy. **Wrong:** the producer wrote the 30-minute stream at once into a 30 s ring buffer, which by design overwrites the oldest audio instead of blocking. 27.8 million samples were dropped and 478 of 500 utterances were never seen (weighted F1 0.026). The results were deleted. Fix in `bench/run_live.py`: at pace 0 the ring buffer is sized to hold the whole stream, and **any run with a ring overrun now exits with an error instead of writing results.**

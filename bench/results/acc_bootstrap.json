@@ -1,0 +1,19 @@
+{
+ "method": "paired bootstrap over test utterances, 2000 resamples, seed 0, \u0394wF1 averaged over 3 seeds per resample",
+ "_trainasr": {
+  "delta_wf1_mean_over_seeds": 0.009928985734620902,
+  "ci95": [
+   -0.0018820658447138345,
+   0.021506321675186766
+  ],
+  "p_delta_le_0": 0.052
+ },
+ "_trainboth": {
+  "delta_wf1_mean_over_seeds": 0.012749128209121144,
+  "ci95": [
+   0.0038625897073277906,
+   0.021590937800320384
+  ],
+  "p_delta_le_0": 0.0045
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "n": 500,
+ "subset": "bench/subsets/test_fixed_500.txt",
+ "head_seed": 0,
+ "gold": {
+  "gold_text_oracle_seg": 0.6233178617606573,
+  "whisper_text_oracle_seg": 0.5374531743540298,
+  "whisper_text_energy_seg_live": 0.5276844784818889
+ },
+ "trainboth": {
+  "gold_text_oracle_seg": 0.6292079189503916,
+  "whisper_text_oracle_seg": 0.5575620095839009,
+  "whisper_text_energy_seg_live": 0.533744265899384
+ }
+}

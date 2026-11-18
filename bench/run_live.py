@@ -125,11 +125,17 @@ def main():
         stages.fuse(te, a)
         warm.append(time.perf_counter() - t)
 
+    # At pace 0 the producer writes the whole stream at once. The ring buffer never blocks the
+    # producer (real-time design), so it must hold the entire stream or audio is dropped.
+    ring_s = 30.0 if args.pace > 0 else stream.seconds + 1.0
     cfg = RunConfig(mode=args.mode, segmenter=args.segmenter, chunk_ms=args.chunk_ms, pace=args.pace,
-                    hangover_s=args.hangover)
+                    hangover_s=args.hangover, ring_seconds=ring_s)
     print(f"stream: {len(stream.gt)} utterances, {stream.seconds:.1f} s; mode={args.mode} "
           f"segmenter={args.segmenter} threads={args.threads}", flush=True)
     res = run(stream, stages, cfg)
+    if res.ring_overrun_samples:
+        raise SystemExit(f"INVALID RUN: ring buffer dropped {res.ring_overrun_samples} samples "
+                         f"({res.ring_overrun_samples / SR:.1f} s of audio); no results written")
     therm_after = sh(["pmset", "-g", "therm"])
     segs = pd.DataFrame(res.segments)
 
