@@ -33,7 +33,7 @@ import pandas as pd  # noqa: E402
 
 from pipeline.fusion.model import FusionHead  # noqa: E402
 from pipeline.live.runner import RunConfig, run  # noqa: E402
-from pipeline.live.stages import Stages  # noqa: E402
+from pipeline.live.stages import StageOptions, Stages  # noqa: E402
 from pipeline.live.stream import SR, build_stream  # noqa: E402
 
 STAGE_KEYS = ["endpoint_delay", "queue_wait", "audio_feat", "audio_enc", "branch_audio", "asr_feat", "asr",
@@ -101,6 +101,8 @@ def main():
     ap.add_argument("--pace", type=float, default=1.0)
     ap.add_argument("--head", type=Path, default=Path("models/fusion_text_audio_seed0.pt"))
     ap.add_argument("--warmup", type=int, default=3)
+    ap.add_argument("--opts", default="{}", help="JSON of StageOptions fields (M4)")
+    ap.add_argument("--hangover", type=float, default=0.3)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -109,7 +111,7 @@ def main():
     therm_before = sh(["pmset", "-g", "therm"])
     stream = build_stream(Path("data/index/test.csv"), Path("bench/subsets/test_fixed_500.txt"), n=args.n)
     t = time.perf_counter()
-    stages = Stages(args.head)
+    stages = Stages(args.head, StageOptions(**json.loads(args.opts)))
     load_s = time.perf_counter() - t
 
     # Warm-up on dev clips (never on the measured test utterances). First-call cost is reported.
@@ -123,7 +125,8 @@ def main():
         stages.fuse(te, a)
         warm.append(time.perf_counter() - t)
 
-    cfg = RunConfig(mode=args.mode, segmenter=args.segmenter, chunk_ms=args.chunk_ms, pace=args.pace)
+    cfg = RunConfig(mode=args.mode, segmenter=args.segmenter, chunk_ms=args.chunk_ms, pace=args.pace,
+                    hangover_s=args.hangover)
     print(f"stream: {len(stream.gt)} utterances, {stream.seconds:.1f} s; mode={args.mode} "
           f"segmenter={args.segmenter} threads={args.threads}", flush=True)
     res = run(stream, stages, cfg)
@@ -185,7 +188,7 @@ def main():
     report = {
         "benchmark": "m2_live", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "config": {**vars(cfg), "n": args.n, "threads": args.threads, "interop_threads": torch.get_num_interop_threads(),
-                   "head": str(args.head), "asr_model": stages.asr_model_name, "device": "cpu"},
+                   "head": str(args.head), "opts": json.loads(args.opts), "asr_model": stages.asr_model_name, "device": "cpu"},
         "env": {"torch": torch.__version__, "transformers": transformers.__version__,
                 "python": platform.python_version(), "macos": platform.mac_ver()[0],
                 "git_commit": sh(["git", "rev-parse", "--short", "HEAD"]),

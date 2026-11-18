@@ -128,6 +128,9 @@ def main():
                                      text=True).stdout.strip(),
         "n": len(df), "load_seconds": load_s, "warmup_seconds": warm,
         "peak_rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20,  # macOS: bytes
+        # RSS does not include Metal (GPU driver) allocations, so report them separately for MPS variants
+        "mps_driver_allocated_mb": (torch.mps.driver_allocated_memory() / 2**20
+                                    if torch.backends.mps.is_available() else None),
         "thermal_warning": ("No thermal warning" not in therm_before) or ("No thermal warning" not in therm_after),
         "stages": {k: pstats(df[k]) for k in KEYS if k in df},
         "rtf_overall": float(df.inference.sum() / df.duration_s.sum()),

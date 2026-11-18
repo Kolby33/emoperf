@@ -106,7 +106,7 @@ class Stages:
         if o.compile:
             self.text_fwd = torch.compile(self.text_model, dynamic=True)
             self.audio_fwd = torch.compile(self.audio_model, dynamic=True)
-            enc_c = torch.compile(lambda f: optim.whisper_encode(self.asr.model.encoder, f), dynamic=True)
+            enc_c = torch.compile(lambda f: optim.whisper_encode_impl(self.asr.model.encoder, f), dynamic=True)
             self.asr_enc = lambda f, n=None: enc_c(f if n is None else f[..., :n])
         if o.mask_cache:
             optim.install_cached_suppress_masks()

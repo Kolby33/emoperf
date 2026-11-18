@@ -40,6 +40,11 @@ VARIANTS = {
     "compile": ("sequential", 4, {}, {"compile": True}),
     "mps_all": ("sequential", 4, {}, {"device": "mps"}),
     "mps_asr_only": ("sequential", 4, {}, {"asr_device": "mps"}),
+    # combinations of the changes that helped (not single-change variants)
+    "combo_cpu_conc_mask": ("concurrent", 4, {}, {"mask_cache": True}),
+    "combo_mps_mask": ("sequential", 4, {}, {"device": "mps", "mask_cache": True}),
+    "combo_mps_mask_conc": ("concurrent", 4, {}, {"device": "mps", "mask_cache": True}),
+    "combo_mpsasr_cpuaudio_conc_mask": ("concurrent", 4, {}, {"asr_device": "mps", "mask_cache": True}),
 }
 
 

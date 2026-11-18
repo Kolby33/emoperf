@@ -1,0 +1,47 @@
+{
+ "onnxruntime": "1.32.0",
+ "torch": "2.15.0",
+ "n": 100,
+ "stages": {
+  "audio_enc": {
+   "torch_cpu": {
+    "p50_ms": 34.912895993329585,
+    "p95_ms": 101.99280625092791
+   },
+   "CPUExecutionProvider": {
+    "p50_ms": 48.766875464934856,
+    "p95_ms": 183.4644291375297,
+    "session_load_s": 0.23589854198507965,
+    "max_rel_diff_vs_torch": 1.3112562555761542e-05,
+    "speedup_p50_vs_torch": 0.7159141458310819
+   },
+   "CoreMLExecutionProvider": {
+    "p50_ms": 110.7587500300724,
+    "p95_ms": 542.3784604296086,
+    "session_load_s": 1.3779905409901403,
+    "max_rel_diff_vs_torch": 0.05406774580478668,
+    "speedup_p50_vs_torch": 0.31521569161669205
+   }
+  },
+  "asr_enc": {
+   "torch_cpu": {
+    "p50_ms": 95.95674995216541,
+    "p95_ms": 96.92497739451937
+   },
+   "CPUExecutionProvider": {
+    "p50_ms": 117.08827098482288,
+    "p95_ms": 118.91719551058486,
+    "session_load_s": 0.18071041599614546,
+    "max_rel_diff_vs_torch": 0.0004239986592438072,
+    "speedup_p50_vs_torch": 0.8195248691015639
+   },
+   "CoreMLExecutionProvider": {
+    "p50_ms": 202.49879150651395,
+    "p95_ms": 204.75871249800548,
+    "session_load_s": 2.5468839170061983,
+    "max_rel_diff_vs_torch": 0.1632958948612213,
+    "speedup_p50_vs_torch": 0.4738633215451989
+   }
+  }
+ }
+}

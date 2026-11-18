@@ -63,9 +63,10 @@ def trimmed_frames(n_samples: int, sr: int, pad_s: float, bucket_s: float, max_f
     return frames + (frames % 2)
 
 
-@torch.inference_mode()
-def whisper_encode(encoder, feats: torch.Tensor, n_frames: int | None = None) -> BaseModelOutput:
-    """Same computation as WhisperEncoder.forward (eval mode), without the 3000-frame check."""
+def whisper_encode_impl(encoder, feats: torch.Tensor, n_frames: int | None = None) -> BaseModelOutput:
+    """Same computation as WhisperEncoder.forward (eval mode), without the 3000-frame check.
+    Undecorated so torch.compile can trace it (an inference_mode block inside a compiled
+    region fails with 'Cannot set version_counter for inference tensor')."""
     if n_frames is not None:
         feats = feats[..., :n_frames]
     x = nn.functional.gelu(encoder.conv1(feats))
@@ -74,3 +75,6 @@ def whisper_encode(encoder, feats: torch.Tensor, n_frames: int | None = None) ->
     for layer in encoder.layers:
         x = layer(x, None)
     return BaseModelOutput(last_hidden_state=encoder.layer_norm(x))
+
+
+whisper_encode = torch.inference_mode()(whisper_encode_impl)

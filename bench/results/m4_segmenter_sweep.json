@@ -1,0 +1,123 @@
+[
+ {
+  "hangover_s": 0.1,
+  "chunk_ms": 20,
+  "segments": 118,
+  "gt_one": 86,
+  "gt_split": 13,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 100.0,
+  "endpoint_delay_ms_p95": 100.0
+ },
+ {
+  "hangover_s": 0.15,
+  "chunk_ms": 20,
+  "segments": 114,
+  "gt_one": 90,
+  "gt_split": 9,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 160.0,
+  "endpoint_delay_ms_p95": 160.0
+ },
+ {
+  "hangover_s": 0.2,
+  "chunk_ms": 20,
+  "segments": 111,
+  "gt_one": 91,
+  "gt_split": 8,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 200.0,
+  "endpoint_delay_ms_p95": 200.0
+ },
+ {
+  "hangover_s": 0.25,
+  "chunk_ms": 20,
+  "segments": 110,
+  "gt_one": 91,
+  "gt_split": 8,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 240.0,
+  "endpoint_delay_ms_p95": 240.0
+ },
+ {
+  "hangover_s": 0.3,
+  "chunk_ms": 20,
+  "segments": 107,
+  "gt_one": 92,
+  "gt_split": 7,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 300.0,
+  "endpoint_delay_ms_p95": 300.0
+ },
+ {
+  "hangover_s": 0.4,
+  "chunk_ms": 20,
+  "segments": 106,
+  "gt_one": 93,
+  "gt_split": 6,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 400.0,
+  "endpoint_delay_ms_p95": 400.0
+ },
+ {
+  "hangover_s": 0.5,
+  "chunk_ms": 20,
+  "segments": 104,
+  "gt_one": 94,
+  "gt_split": 5,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 500.0,
+  "endpoint_delay_ms_p95": 500.0
+ },
+ {
+  "hangover_s": 0.7,
+  "chunk_ms": 20,
+  "segments": 102,
+  "gt_one": 96,
+  "gt_split": 3,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 700.0,
+  "endpoint_delay_ms_p95": 700.0
+ },
+ {
+  "hangover_s": 0.3,
+  "chunk_ms": 10,
+  "segments": 107,
+  "gt_one": 92,
+  "gt_split": 7,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 300.0,
+  "endpoint_delay_ms_p95": 300.0
+ },
+ {
+  "hangover_s": 0.3,
+  "chunk_ms": 50,
+  "segments": 107,
+  "gt_one": 92,
+  "gt_split": 7,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 320.0,
+  "endpoint_delay_ms_p95": 340.0
+ },
+ {
+  "hangover_s": 0.3,
+  "chunk_ms": 100,
+  "segments": 107,
+  "gt_one": 92,
+  "gt_split": 7,
+  "gt_missed": 1,
+  "segments_merging_gt": 0,
+  "endpoint_delay_ms_p50": 340.0,
+  "endpoint_delay_ms_p95": 380.0
+ }
+]
