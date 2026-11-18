@@ -169,3 +169,94 @@ From Instruments Time Profiler (about 1 sample per ms per running thread; last 3
 `aten::_slow_conv2d_forward` is 28.1% of the audio encoder's op time. The shapes are wav2vec2's 1-D feature-encoder convolutions (e.g. `[1, 512, 1, 23618] * [512, 512, 1, 3]`, size growing with the clip) plus Whisper's two input convolutions. This PyTorch build has no oneDNN (`USE_MKLDNN=OFF`, see M0), so convolutions run on the generic path. It's a candidate for ONNX Runtime or Core ML in M4.
 
 **Memory:** peak RSS during the profiled run was 4.6 GB, but `profile_memory` and `record_shapes` inflate this. It isn't a pipeline number; M4 measures memory without the profiler.
+
+## E5 (M4): Optimization experiments, one change at a time
+
+**Method:** `bench/m4_suite.py` runs each variant in a fresh process (so thread settings, environment variables and patches can't leak between variants), on the first 100 utterances of the fixed subset, ground-truth clips, oracle segmentation. 5 dev-clip warm-ups first (they also absorb `torch.compile` compile time). Two rounds per variant, round 2 in reverse order. 15 s cooldowns, AC power, no thermal warnings in any run. Each variant changes **one thing** from `baseline` (sequential, `torch.set_num_threads(4)`, CPU, fp32, M2 code with Whisper split into encoder + decode, which is bit-identical). The `combo_*` rows combine changes that helped. Full table: `docs/m4_variants_table.md` (from `bench/m4_summarize.py`). Raw data: `bench/results/m4/*.json`.
+
+**Baseline drift:** the baseline was measured in three sessions: 195.9, 192.7 and 200.5 ms p50 (range of single runs 192.0–203.2 ms). **Differences under about 5% are inside that drift.** Small effects below are compared against the baseline from the same session.
+
+**Accuracy check:** every variant reports weighted F1 on the 100 utterances, Whisper WER against MELD transcripts, and the share of utterances where the emotion prediction and the transcript are identical to the baseline's.
+
+### Results (inference latency per utterance, mean of 2 rounds)
+
+| Variant (one change) | p50 ms | p95 ms | vs baseline | wF1 (Δ) | WER | same preds / text | Kept? |
+|---|---|---|---|---|---|---|---|
+| baseline (CPU fp32, 4 threads) | 195.9 (session 1) | 376.1 | 1.00× | 0.497 | 0.320 | — | — |
+| threads = 1 | 275.6 | 493.1 | 0.71× | same | same | 100% / 100% | no |
+| threads = 2 / 3 | 211.4 / 199.6 | 396.9 / 365.9 | 0.93× / 0.98× | same | same | 100% / 100% | no |
+| threads = 6 / 8 / 10 | 196.0 / 192.6 / 195.9 | 361.4 / 356.8 / 359.5 | 1.00× / 1.02× / 1.00× | same | same | 100% / 100% | no (no gain) |
+| `VECLIB_MAXIMUM_THREADS=1` | 201.1 | 394.2 | 0.97× | same | same | 100% / 100% | no |
+| concurrent branches (4 + 4 threads) | 180.3 | 314.4 | 1.09× | same | same | 100% / 100% | yes (CPU) |
+| concurrent, threads split 2 + 2 | 197.1 | 320.8 | 0.99× | same | same | 100% / 100% | no |
+| concurrent, threads split 1 + 3 | 191.4 | 326.8 | 1.02× | same | same | 100% / 100% | no |
+| cached suppress masks | 193.6 (ASR −5.5 ms) | 356.3 | 1.01× | same | same | 100% / 100% | **yes** (free, identical output) |
+| Whisper input trimmed: audio + 1 s, 1 s buckets | 148.1 | 547.4 | 1.32× | 0.495 (−0.003) | **2.389** | 78% / 29% | **no** |
+| trimmed: audio + 2 s, 5 s buckets | 121.9 | 532.2 | 1.61× | 0.472 (−0.025) | **1.017** | 90% / 49% | **no** |
+| trimmed: 10 s windows | 141.6 (±23.7) | 345.7 | 1.38× | 0.460 (−0.037) | 0.333 | 94% / 61% | **no** |
+| int8 dynamic quantization (qnnpack) | 404.2 | 810.2 | 0.48× | 0.493 (−0.005) | 0.380 | 87% / 69% | **no** |
+| bf16 weights + activations (CPU) | 3224.9 | 8252.3 | 0.06× | 0.499 (+0.002) | 0.318 | 99% / 95% | **no** (RTF 1.43: not real-time) |
+| fp16 weights + activations (CPU) | 2843.2 | 7304.0 | 0.07× | 0.497 | 0.319 | 100% / 98% | **no** (RTF 1.28) |
+| `torch.compile` (3 encoders, dynamic shapes) | 199.3 | 386.5 | 0.97× (same session: 192.7) | same | same | 100% / 100% | no |
+| all 3 models on MPS (GPU) | 101.4 | 180.8 | 1.93× | same | same | 100% / 100% | yes |
+| only Whisper on MPS | 120.1 | 252.3 | 1.63× | same | same | 100% / 100% | yes |
+
+ONNX Runtime 1.32 (`bench/m4_ort.py`, `bench/results/m4_ort.json`), encoders only, 100 clips:
+
+| Encoder | PyTorch CPU | ORT CPU EP | ORT Core ML EP |
+|---|---|---|---|
+| wav2vec2 + pooling, p50 | 34.9 ms | 48.8 ms (0.72×), max rel. diff 1.3e-5 | 110.8 ms (0.32×), max rel. diff 5.4e-2 |
+| Whisper encoder (3000 frames), p50 | 96.0 ms | 117.1 ms (0.82×), max rel. diff 4.2e-4 | 202.5 ms (0.47×), max rel. diff 1.6e-1 |
+
+ORT's log: Core ML supports only 386/716 wav2vec2 nodes (graph split into 109 partitions) and 192/231 Whisper-encoder nodes (33 partitions), so execution keeps switching between Core ML and the CPU. The large differences suggest Core ML used reduced precision. Not kept.
+
+### Combinations (same session as the last baseline, 197.9 / 203.2 ms)
+
+| Combination | p50 ms | p95 ms | vs baseline (200.5) | Accuracy |
+|---|---|---|---|---|
+| CPU: concurrent + mask cache | 178.0 | 292.9 | 1.13× | identical |
+| all MPS + mask cache | 99.4 | 181.9 | 2.02× | identical |
+| all MPS + mask cache + concurrent | 96.1 | 175.9 | 2.09× | identical |
+| **Whisper on MPS ‖ wav2vec2 on CPU, concurrent + mask cache** | **82.8** | **137.4** | **2.42× (p95 2.71×)** | identical (100% same preds and text) |
+
+Memory: process RSS doesn't include Metal (GPU driver) allocations. For the best combination, RSS was 2094 MB plus 1177 MB reported by `torch.mps.driver_allocated_memory()`, about 3.3 GB in total, against 2.1 GB for the CPU baseline. Variants with all models on MPS: RSS 727–733 MB plus about 2.2 GB in Metal. The speedup costs roughly +1.2 GB of memory.
+
+### What each result means
+
+1. **More threads stop helping after 4.** 1 → 2 → 4 threads: 275.6 → 211.4 → about 196 ms. 6, 8 and 10 threads (adding E-cores) are within noise of 4. And `VECLIB_MAXIMUM_THREADS=1`, which limits Accelerate's own threads, costs only 3%. Consistent with E0: most of the time is in Accelerate matmuls, which barely scale with CPU threads on this chip.
+2. **Splitting the thread budget between concurrent branches didn't fix contention** (H2 fix attempt: failed). With fewer threads, ASR got slower (180–186 ms) more than the audio branch got faster. Concurrency only paid off once the branches ran on **different hardware**: Whisper on the GPU and wav2vec2 on the CPU. Then the audio encoder ran at 38 ms, the same as alone, instead of 65 ms when sharing the CPU or 49 ms when sharing the GPU.
+3. **Cached suppress masks: a real but small win** (M3 hotspot 2). Same-session ASR p50 went from 151.5 to 146.0 ms (−3.6%), with identical tokens on all 100 utterances. Smaller than the ~9 ms I predicted from the profile (1 ms × 9 tokens). The profiler overstated the cost, because it inflates small ops (E4: decode had about 19% profiler overhead).
+4. **Trimming Whisper's padded input is fast but breaks ASR** (M3 hotspot 1 fix: failed). ASR dropped to 74–90 ms, but Whisper hallucinated on short windows. WER went to 2.39 (outputs much longer than the reference, i.e. repetition loops), and p95 got *worse* (547 ms) because hallucinated outputs take many decode steps. Even 10 s windows cost −0.037 wF1. The hotspot is real, but fixing it needs a model trained for shorter windows, not trimming.
+5. **Lower precision is a large slowdown on this CPU.** int8 through qnnpack is 2× slower, with worse WER (0.380). bf16 and fp16 are 14–17× slower and no longer real-time. The fp32 path runs on Accelerate's matrix hardware; these paths don't (M4 probe: a Whisper-sized feed-forward layer took 5.1 ms in fp32, 17.8 int8, 28.3 fp16, 45.6 bf16).
+6. **`torch.compile` didn't help:** the encoders are matmul-bound, Inductor calls the same Accelerate matmuls, and the decode loop, where small-op overhead lives, stayed eager.
+7. **The GPU is the big win.** Whisper's cost is many medium-sized matmuls over 1500 positions; on MPS ASR went from about 150 to about 73 ms.
+
+## E6 (M4): Real-time end-to-end with the best configuration
+
+**Setup:** `bench/m4_live_runs.sh`, the same 100-utterance real-time stream as M2. Configuration: Whisper on MPS, wav2vec2 + text encoder on CPU, branches concurrent, mask cache on. Hangover 0.3 s (same segmentation as M2) and 0.2 s (from the segmenter sweep), interleaved A B A B with 60 s cooldowns, git `8922d19`, no thermal warnings. Raw data: `bench/results/m4_live_best_h{0.3,0.2}_r{1,2}.json`.
+
+**Segmenter sweep** (`bench/segmenter_sweep.py`, no models; `bench/results/m4_segmenter_sweep.json`):
+
+| Hangover | GT utterances with 1 segment / split / missed | Endpoint delay p50 |
+|---|---|---|
+| 0.1 s | 86 / 13 / 1 | 100 ms |
+| 0.2 s | 91 / 8 / 1 | 200 ms |
+| 0.3 s (M2) | 92 / 7 / 1 | 300 ms |
+| 0.5 s | 94 / 5 / 1 | 500 ms |
+| 0.7 s | 96 / 3 / 1 | 700 ms |
+
+No setting merged two utterances (the 0.8 s gaps are longer than any hangover). Chunk size: 10 and 20 ms identical; 50 / 100 ms only add 20–40 ms p50 rounding delay.
+
+**Result (ms, p50 / p95):**
+
+| | M2 sequential (r1) | M2 concurrent (r1) | Best, hangover 0.3 (r1, r2) | Best, hangover 0.2 (r1, r2) |
+|---|---|---|---|---|
+| ASR | 150.7 / 226.8 | 180.6 / 300.9 | 107.0 / 141.7, 114.2 / 184.6 | 104.8 / 147.1, 104.8 / 142.8 |
+| Inference total | 223.6 / 342.1 | 201.2 / 331.5 | 126.4 / 161.9, 137.6 / 241.4 | 126.8 / 169.0, 126.8 / 165.9 |
+| **End-to-end** | **525.3 / 641.1** | 501.9 / 634.4 | 427.1 / 462.5, 436.8 / 542.5 | **327.1 / 372.0, 328.6 / 366.2** |
+| RTF overall | 0.072 | 0.065 | 0.039, 0.045 | 0.041, 0.041 |
+| Live wF1 / WER | 0.503 / 0.315 | 0.503 / 0.315 | 0.503 / 0.315 | 0.503 / 0.318 |
+
+- **End-to-end p50: 525 → 328 ms (−37%); p95: 641 → 366–372 ms (−42 to −43%).** About 100 ms comes from compute (inference 224 → 126–138 ms) and 100 ms from the shorter hangover.
+- Accuracy is unchanged. The 0.2 s hangover split one more utterance (91 / 8 / 1), but the weighted F1 on these 100 is the same (0.503); WER went 0.315 → 0.318.
+- **Open question:** in the live stream, MPS ASR p50 is 105–114 ms, but offline (back-to-back clips) it's 72 ms. Not measured yet. One hypothesis: the GPU slows its clock during the ~3.5 s idle gaps between utterances, so each utterance starts on a "cold" GPU. Checking that needs `powermetrics` (sudo), so I'd run it with you. Because of this, the live speedup (1.6–1.8× on inference) is smaller than the offline one (2.4×). The README should quote the live number for latency.

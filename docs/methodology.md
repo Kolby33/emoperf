@@ -113,3 +113,11 @@ What this run does and doesn't show is logged in `docs/experiments.md` (E0).
 - Accuracy: each ground-truth utterance takes the prediction of the segment that overlaps it most; a missed utterance counts as wrong. The offline reference uses the cached gold-transcript embeddings for the same utterances.
 - Committed result JSONs contain no MELD text. Full runs, including transcripts, are written to `data/runs/` (git-ignored).
 - Unit tests: `python -m pytest` (ring buffer, bounded queue, segmenter: empty, full, wraparound, overrun, close, threaded and chunk-size invariance cases).
+
+## Optimization experiments (M4)
+
+- Offline per-variant harness: `bench/m4_bench.py` (one process per variant), driven by `bench/m4_suite.py`; summary table `bench/m4_summarize.py` → `docs/m4_variants_table.md`.
+- Baseline p50 drifted 192–203 ms across sessions; effects under about 5% are compared within a session only.
+- Memory: peak process RSS (`ru_maxrss`) plus `torch.mps.driver_allocated_memory()` for MPS variants, because RSS doesn't count Metal allocations.
+- Extra packages for M4 (in `.venv` only): onnxruntime 1.32.0, onnx 1.23.2, onnxscript 0.7.2. ONNX files in `data/onnx/` (git-ignored).
+- Final live configuration: `bench/m4_live_runs.sh` (`--opts '{"asr_device": "mps", "mask_cache": true}' --mode concurrent --hangover 0.2`).
