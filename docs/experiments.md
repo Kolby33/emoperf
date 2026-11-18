@@ -198,7 +198,7 @@ From Instruments Time Profiler (about 1 sample per ms per running thread; last 3
 | bf16 weights + activations (CPU) | 3224.9 | 8252.3 | 0.06× | 0.499 (+0.002) | 0.318 | 99% / 95% | **no** (RTF 1.43: not real-time) |
 | fp16 weights + activations (CPU) | 2843.2 | 7304.0 | 0.07× | 0.497 | 0.319 | 100% / 98% | **no** (RTF 1.28) |
 | `torch.compile` (3 encoders, dynamic shapes) | 199.3 | 386.5 | 0.97× (same session: 192.7) | same | same | 100% / 100% | no |
-| all 3 models on MPS (GPU) | 101.4 | 180.8 | 1.93× | same | same | 100% / 100% | yes |
+| all 3 models on MPS (GPU) | 101.4 (session 3) | 180.8 | 1.98× (vs session-3 baseline 200.5) | same | same | 100% / 100% | yes |
 | only Whisper on MPS | 120.1 | 252.3 | 1.63× | same | same | 100% / 100% | yes |
 
 ONNX Runtime 1.32 (`bench/m4_ort.py`, `bench/results/m4_ort.json`), encoders only, 100 clips:
@@ -257,6 +257,6 @@ No setting merged two utterances (the 0.8 s gaps are longer than any hangover). 
 | RTF overall | 0.072 | 0.065 | 0.039, 0.045 | 0.041, 0.041 |
 | Live wF1 / WER | 0.503 / 0.315 | 0.503 / 0.315 | 0.503 / 0.315 | 0.503 / 0.318 |
 
-- **End-to-end p50: 525 → 328 ms (−37%); p95: 641 → 366–372 ms (−42 to −43%).** About 100 ms comes from compute (inference 224 → 126–138 ms) and 100 ms from the shorter hangover.
+- **End-to-end p50: 525 → 328 ms (−37%); p95: 641 → 366–372 ms (−42 to −43%).** 86–97 ms comes from compute (inference p50 224 → 126–138 ms) and 100 ms from the shorter hangover.
 - Accuracy is unchanged. The 0.2 s hangover split one more utterance (91 / 8 / 1), but the weighted F1 on these 100 is the same (0.503); WER went 0.315 → 0.318.
 - **Open question:** in the live stream, MPS ASR p50 is 105–114 ms, but offline (back-to-back clips) it's 72 ms. Not measured yet. One hypothesis: the GPU slows its clock during the ~3.5 s idle gaps between utterances, so each utterance starts on a "cold" GPU. Checking that needs `powermetrics` (sudo), so I'd run it with you. Because of this, the live speedup (1.6–1.8× on inference) is smaller than the offline one (2.4×). The README should quote the live number for latency.
