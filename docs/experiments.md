@@ -133,7 +133,7 @@ Profiler overhead: profiled Whisper encoder time per clip (91.6 ms) is close to 
 ### Hotspot 1: Whisper encoder runs on 30 s of input, about 92% of it padding (H1: confirmed)
 
 - Every clip goes in as `(1, 80, 3000)` mel frames and comes out as `(1, 1500, 512)`, whatever its length. The median clip is 2.52 s, so the median input is 91.6% padding.
-- No profiler: encoder 92.7 ms p50 (range 91.7–97.9 ms) on clips from 0.6 to about 8 s. **Correlation between clip length and encoder time: r = 0.06.** For comparison, the wav2vec2 branch, which only sees the real audio, has r = 0.99.
+- No profiler: encoder 92.7 ms p50 (range 91.7–97.9 ms) on clips from 0.59 to 7.38 s. **Correlation between clip length and encoder time: r = 0.06.** For comparison, the wav2vec2 branch, which only sees the real audio, has r = 0.99.
 - Inside the encoder: `addmm` (linear layers on `[1500, 512]` activations) 39.9%, and attention `_scaled_dot_product_flash_attention_for_cpu` on `[1, 8, 1500, 64]` 38.5%. That one (op, shape) pair, 180 calls, is the single most expensive in the whole profile: 1049 ms.
 - **Hypothesis for M4:** feeding the encoder only the real frames (rounded up to some bucket) would make its time scale with clip length. Attention cost grows with length², so it would shrink even faster. Risks: Whisper was trained on 30 s windows and has a fixed 1500-position embedding, and the HF implementation checks the input length. This needs a code change plus a WER and F1 check, not just a flag.
 
