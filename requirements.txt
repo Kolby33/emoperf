@@ -46,6 +46,7 @@ scikit-learn==1.9.1
 scipy==1.18.1
 setuptools==84.2.1
 shellingham==1.5.4
+sounddevice==0.5.6
 soundfile==0.14.0
 sympy==1.14.0
 threadpoolctl==3.8.0
