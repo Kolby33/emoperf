@@ -68,6 +68,17 @@ def stats(xs):
             "mean_ms": float(xs.mean()), "max_ms": float(xs.max()), "n": int(len(xs))}
 
 
+TEXT_FIELDS = {"text", "transcript", "response_text"}
+
+
+def strip_text(report):
+    out = dict(report)
+    out["segments"] = [{k: v for k, v in s.items() if k not in TEXT_FIELDS} for s in report["segments"]]
+    out["gt"] = [{k: v for k, v in g.items() if k not in TEXT_FIELDS} for g in report["gt"]]
+    out["text_fields_removed"] = sorted(TEXT_FIELDS)
+    return out
+
+
 def offline_reference(gt, head_path):
     idx = pd.read_csv("data/index/test.csv", keep_default_na=False)
     pos = idx.reset_index().set_index("utt_key").loc[gt.utt_key, "index"].values
@@ -186,8 +197,13 @@ def main():
                      for r in res.segments],
         "gt": gt.to_dict("records"),
     }
+    # Full detail (with MELD transcripts and ASR output) stays in git-ignored data/runs/.
+    # The committed result file has no dataset text, only IDs, labels, timings and metrics.
+    full = Path("data/runs") / f"{args.out.stem}_full.json"
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(json.dumps(report, indent=1, default=float))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=1, default=float))
+    args.out.write_text(json.dumps(strip_text(report), indent=1, default=float))
 
     s = summary["stages"]
     print(f"wall {res.wall_seconds:.1f}s for {audio_s:.1f}s audio | overall RTF {summary['rtf_overall']:.3f} | "

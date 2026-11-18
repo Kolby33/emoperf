@@ -100,3 +100,16 @@ What this run does and doesn't show is logged in `docs/experiments.md` (E0).
 - Audio: 16 kHz mono 16-bit PCM WAV via ffmpeg 9.0.2 (`pipeline/data/extract_audio.py`). 13,715 clips in 70 s with 8 workers.
 - Rebuild everything: `scripts/m1_rebuild.sh`. Evaluation only: `python pipeline/fusion/evaluate.py`.
 - Encoders: `distilbert/distilroberta-base` (Apache-2.0, pretrained on OpenWebText) and `facebook/wav2vec2-base` (Apache-2.0, pretrained on LibriSpeech). Neither was fine-tuned on emotion data, so the MELD test set can't leak through the encoders. (`j-hartmann/emotion-english-distilroberta-base` was rejected for this reason: it was trained on several emotion datasets, including MELD.)
+
+## Live benchmark (M2)
+
+- Command: `bench/m2_runs.sh` (sequential and concurrent, interleaved S C S C, 60 s cooldown), or `python bench/run_live.py --mode {sequential,concurrent} --n 100 --out ...`.
+- Stream: the first 100 utterances of the fixed test subset, in key order, joined with 0.8 s of −75 dBFS seeded white noise between them; 358.2 s total. Fed in 20 ms chunks at real-time pace by a producer thread.
+- Warm-up: 3 dev-set clips through both branches before the timed stream (never test clips).
+- Latency definitions (all from one `time.perf_counter` clock):
+  - end-to-end = time the response is ready − time the chunk holding the segment's last speech sample was written
+  - endpoint delay = when the segmenter closed the segment − that same write time
+  - RTF per segment = inference time / segment duration; overall RTF = total inference time / stream duration
+- Accuracy: each ground-truth utterance takes the prediction of the segment that overlaps it most; a missed utterance counts as wrong. The offline reference uses the cached gold-transcript embeddings for the same utterances.
+- Committed result JSONs contain no MELD text. Full runs, including transcripts, are written to `data/runs/` (git-ignored).
+- Unit tests: `python -m pytest` (ring buffer, bounded queue, segmenter: empty, full, wraparound, overrun, close, threaded and chunk-size invariance cases).

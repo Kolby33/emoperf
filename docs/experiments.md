@@ -76,3 +76,48 @@ Final sizes: train 9976, dev 1106, **test 2610 (all labeled test utterances)**. 
 **Reference model for M2 onward:** `fusion_text_audio_seed0.pt`, chosen as seed 0 in advance and not picked by test score. Test weighted F1 0.6032, macro F1 0.4107. Fixed 500-utterance subset (`bench/subsets/test_fixed_500.txt`, seed 0): weighted F1 0.6233, macro F1 0.4011. These are the accuracy numbers later optimizations get compared against.
 
 **Embedding cache check:** MPS and CPU wav2vec2 outputs on 32 dev clips: max relative difference 3.9e-4, min cosine 0.99999976. Most of the difference comes from storing as fp16.
+
+## E3 (M2): Live pipeline, sequential vs concurrent branches
+
+**Setup:** 100 utterances (first 100 keys of `bench/subsets/test_fixed_500.txt`) joined into one 358.2 s stream with 0.8 s gaps of −75 dBFS noise, fed in 20 ms chunks at real-time pace. Energy segmenter: −55 dBFS threshold, 0.3 s hangover. Everything on CPU, `torch.set_num_threads(4)`, fp32. ASR `openai/whisper-base.en` with greedy decoding. Head `fusion_text_audio_seed0.pt`. Runs interleaved S C S C with 60 s cooldowns (`bench/m2_runs.sh`), git `8f68f42`, AC power, no thermal warnings before or after any run. Raw data: `bench/results/m2_{sequential,concurrent}_r{1,2}.json`.
+
+**Hypothesis:** running branch A (audio) and branch B (ASR + text) at the same time cuts inference latency from A + B to max(A, B), saving about the audio branch's time (~60 ms).
+
+**Result (ms, p50 / p95, per detected segment, n = 107 segments per run):**
+
+| Stage | Sequential r1 | Sequential r2 | Concurrent r1 | Concurrent r2 |
+|---|---|---|---|---|
+| Endpoint delay (hangover) | 300.4 / 304.2 | 300.5 / 303.9 | 300.4 / 307.3 | 300.2 / 306.1 |
+| Branch A: audio encoder total | 62.0 / 121.3 | 63.2 / 126.1 | 86.6 / 196.2 | 89.5 / 210.7 |
+| Branch B: ASR (Whisper generate) | 150.7 / 226.8 | 148.8 / 236.3 | 180.6 / 300.9 | 198.1 / 310.0 |
+| Branch B total (ASR + text encoder) | 161.8 / 239.5 | 160.1 / 248.4 | 200.4 / 331.0 | 221.0 / 331.1 |
+| Inference total | 223.6 / 342.1 | 223.4 / 356.7 | 201.2 / 331.5 | 221.6 / 331.6 |
+| **End-to-end (speech end to output)** | **525.3 / 641.1** | **526.6 / 660.4** | **501.9 / 634.4** | **518.0 / 631.4** |
+| RTF overall (busy time / audio time) | 0.072 | 0.073 | 0.065 | 0.068 |
+
+Fusion head 0.1 ms and response template < 0.1 ms in every run. Queue max depth 1, ring overrun 0, and the producer was a median 3.9 ms late per chunk (p99 4.9 ms, max 7.6–17.9 ms) without drifting.
+
+**Findings:**
+
+1. **Concurrency helps much less than the theory says.** The ideal concurrent time is max(A, B) ≈ 162 ms (sequential branch B). The measured result is 201–222 ms. Inference p50 improved by only 2–22 ms (1–10%), and the two concurrent runs differ from each other by 20 ms, about as much as the effect itself. p95 improved by 11–25 ms.
+2. **Why: the branches slow each other down.** Running together, the audio encoder went from 62 to 87–90 ms and ASR from 149–151 to 181–198 ms. Each branch starts its own 4-thread OpenMP team, so 8 compute threads compete for 4 P-cores (the rest land on E-cores or wait). That contention adds 39–60 ms to the critical path and cancels most of the ~62 ms we hoped to save. This is a hypothesis for M3/M4: thread sweeps (e.g. 2 + 2 threads) should test it.
+3. **The text branch is the critical path in 99–100% of segments,** and ASR is 92–94% of it. Whisper is the thing to optimize.
+4. **The largest part of end-to-end latency is the 300 ms hangover,** waiting for silence to decide the utterance ended (57–60% of p50 end-to-end). Compute is about 200–225 ms of it. Cutting the hangover trades latency for more split utterances; that's an M4 experiment.
+5. **Plenty of headroom:** RTF 0.065–0.073 means the pipeline is busy only about 7% of real time, which is why the queue never backs up.
+
+**Accuracy (the same in all 4 runs, because the pipeline is deterministic):**
+
+| On the same 100 utterances | Weighted F1 | Macro F1 | Accuracy |
+|---|---|---|---|
+| Offline (gold transcript, oracle segments) | 0.599 | 0.424 | 0.62 |
+| Live (Whisper transcript, energy segmenter) | 0.503 | 0.332 | 0.53 |
+
+- Live loses 0.096 weighted F1. Two causes, not yet separated: ASR word error rate of 31.5% on this TV audio (laughter, crosstalk, music), and segmentation (92 utterances got exactly one segment, 7 were split, 1 was missed). An oracle-segmenter run would separate them.
+- n = 100 is small: one utterance is 1% accuracy. These accuracy numbers are a reference for later speed changes, not a model-quality claim.
+
+**Not explained yet:** the first warm-up call (after the models load) took 290, 506, 997 and 2032 ms in the four runs.
+
+**Hypotheses for M3 (write down before profiling):**
+- H1: Whisper's encoder always processes a 30 s padded input (3000 mel frames), even for a 2.5 s utterance, so most of its encoder compute goes to padding.
+- H2: In concurrent mode, OpenMP oversubscription (2 × 4 threads on 4 P-cores) is what slows both branches.
+- H3: Whisper's token-by-token decode loop has significant Python overhead per token, which also holds the GIL and slows the other branch.
