@@ -27,3 +27,11 @@ The M4 best configuration: 20 ms microphone blocks → ring buffer → energy se
 Latency after speech ended: p50 339 ms, p95 356 ms (200 ms waiting for silence + about 140 ms of model time). Emotion matched the MELD label for 4 of 8 clips. Microphone input hasn't been measured by me; it needs you speaking. Expect Whisper to do better on clean close-up speech than on TV audio, but that hasn't been measured either.
 
 **Known limits:** English only (Whisper base.en). Short replies ("yeah", "ok") are often tagged neutral. Sarcasm usually reads as its literal meaning. Accuracy on MELD is about 53–56% live (see `docs/experiments.md`, E7, and `docs/related_results.md`).
+
+## Troubleshooting: "Room noise -120 dBFS" / no utterances detected
+
+-120 dBFS is digital silence: every sample is exactly 0. On macOS that means the app the terminal runs in has **no microphone permission**. macOS doesn't raise an error; it delivers zeros. The demo now detects this and says so (terminal message and a red banner on the page).
+
+This happened on 2026-11-18 when running from the Claude desktop app's terminal pane: macOS attributes the request to `Claude.app`, which didn't have microphone access, while the same Python code run elsewhere got real audio (-37 dBFS). Fixes (you change these, not the code):
+- Run the demo from the **Terminal** app (Applications → Utilities → Terminal). macOS asks for microphone access the first time; choose Allow.
+- Or enable the app in **System Settings → Privacy & Security → Microphone**, then restart the demo.

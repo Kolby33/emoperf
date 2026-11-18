@@ -34,6 +34,12 @@ from pipeline.live.stages import StageOptions, Stages
 SR = 16000
 CHUNK = 320  # 20 ms
 
+SILENT_MIC_MESSAGE = (
+    "The microphone is sending pure silence (every sample is exactly 0). On macOS this means the app this "
+    "terminal runs in has no microphone permission: macOS returns zeros instead of an error. Fix: run the demo "
+    "from the Terminal app (it asks for permission the first time), or turn the app on in System Settings > "
+    "Privacy & Security > Microphone, then restart the demo.")
+
 
 @dataclass
 class SessionConfig:
@@ -117,6 +123,8 @@ class LiveSession:
             self.status("calibrating", f"Stay quiet for {c.calibrate_s:.0f} s while the room noise is measured ...")
             quiet = sd.rec(int(c.calibrate_s * SR), samplerate=SR, channels=1, dtype="float32", device=c.device)
             sd.wait()
+            if not np.any(quiet):
+                self.status("error", SILENT_MIC_MESSAGE)
             self.seg.calibrate(quiet[:, 0])
             self._emit_calibrated()
             pos = [0]
@@ -133,7 +141,8 @@ class LiveSession:
             self._mic = sd.InputStream(samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK,
                                        callback=callback, device=c.device)
             self._mic.start()
-            self.status("listening", "Listening. Speak, then pause briefly.")
+            if np.any(quiet):
+                self.status("listening", "Listening. Speak, then pause briefly.")
         else:
             audio = self._load_replay_audio()
             self.seg.calibrate(audio[: int(0.5 * SR)])
@@ -192,9 +201,15 @@ class LiveSession:
             self.stop()
 
     def _level_ticker(self):
+        silent_ticks, warned = 0, False
         while not self.stop_event.is_set():
             time.sleep(0.1)
             lvl, self._level = self._level, -120.0
+            if self.cfg.source == "mic":  # all-zero input for 3 s: permission problem, say so once
+                silent_ticks = silent_ticks + 1 if lvl <= -119.9 else 0
+                if silent_ticks >= 30 and not warned:
+                    self.status("error", SILENT_MIC_MESSAGE)
+                    warned = True
             self.emit({"type": "level", "db": lvl, "floor_db": self.seg.noise_floor_db,
                        "threshold_db": self.seg.current_threshold_db(), "speaking": self.seg._active})
 

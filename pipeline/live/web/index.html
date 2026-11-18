@@ -29,7 +29,11 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
   .pill.listening .dot, .pill.replaying .dot { background: var(--good); }
   .pill.loading .dot, .pill.calibrating .dot { background: var(--warn); }
-  .pill.stopped .dot, .pill.offline .dot { background: var(--bad); }
+  .pill.stopped .dot, .pill.offline .dot, .pill.error .dot { background: var(--bad); }
+  #alert { display: none; margin: 16px 20px 0; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--bad);
+           color: var(--ink); background: color-mix(in srgb, var(--bad) 10%, var(--panel)); max-width: 1140px; }
+  @media (min-width: 1220px) { #alert { margin: 16px auto 0; } }
+  #alert.show { display: block; }
   .meta { color: var(--muted); font-size: 13px; }
   main { display: grid; gap: 16px; padding: 16px 20px 32px; max-width: 1180px; margin: 0 auto;
          grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
@@ -82,6 +86,7 @@
   <span id="calib" class="meta"></span>
   <span id="score" class="meta"></span>
 </header>
+<div id="alert" role="alert"></div>
 
 <main>
   <section class="card" aria-live="polite">
@@ -146,7 +151,12 @@ const pct = (xs, q) => { const s = [...xs].sort((a, b) => a - b); const k = (s.l
 
 function setStatus(state, msg) {
   $("status").className = "pill " + state;
-  $("status-text").textContent = msg || state;
+  if (state === "error") {  // long explanation goes in the banner, short label in the pill
+    $("status-text").textContent = "Microphone problem";
+    $("alert").textContent = msg; $("alert").classList.add("show");
+  } else {
+    $("status-text").textContent = msg || state;
+  }
 }
 
 function showLatest(u) {
