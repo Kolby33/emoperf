@@ -152,6 +152,10 @@ MELD (Poria et al., ACL 2019; built on EmotionLines, Chen et al., 2018) is distr
 
 ## How this was built
 
-I used Claude Code, Anthropic's AI coding assistant, for most of the implementation. It wrote most of the code, ran the benchmarks and profiling sessions, and drafted the documentation, including this README.
+It starts with MELD, a dataset of TV dialogue labeled with seven emotions. I froze two pretrained encoders, distilroberta for text and wav2vec2 for audio, and trained a small fusion head on top. On the test set it scores 0.61 weighted F1 using the human transcripts.
 
-I wrote the project plan it worked from. The plan set the goals and the rules: report p50 and p95, check accuracy next to every speed number, keep failed experiments in the log, and put no number in the write-up that didn't come from a real run. I made the calls along the way, like moving the project from my Windows desktop to my MacBook, choosing which accuracy experiments to run, and adding the live demo and its web page. I tested the demo with my own voice and reported what broke, including a microphone that macOS was silently blocking. When I asked how to improve accuracy, the answer started with measuring where live accuracy is lost, and my question about whether 53% was any good is why the README compares against published MELD results.
+The live version takes 20 ms microphone blocks into a ring buffer and cuts utterances with an energy-based segmenter. Whisper base.en transcribes each one while the audio encoder runs alongside it. The baseline took 525 ms at p50 from the end of speech to an answer. Profiling with torch.profiler and Instruments showed that 92% of Whisper’s encoder input was padding and that its decode loop rebuilt a 51,864-token mask at every step.
+
+I then tested more than 25 configurations, one change at a time, each in a fresh process with interleaved runs and an accuracy check. Trimming the padding, int8, bf16, torch.compile and ONNX Runtime all failed or ran slower. What worked was running Whisper on the Apple GPU beside the CPU audio encoder, caching the mask, and shortening the silence timeout to 0.2 s. That brought latency down to 328 ms at p50 with the same accuracy.
+
+Live accuracy is lower than the offline score, about 0.53 weighted F1 on 500 utterances, mostly because Whisper mishears TV audio. The failed experiments are logged in the repo with the successful ones.
