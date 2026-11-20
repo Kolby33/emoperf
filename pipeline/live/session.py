@@ -5,9 +5,10 @@ Listeners receive plain dict events:
 
   {"type": "status", "state": "loading|calibrating|listening|replaying|stopped", "message": str}
   {"type": "calibrated", "floor_db": float, "threshold_db": float}
-  {"type": "level", "db": float, "floor_db": float, "threshold_db": float, "speaking": bool}   (10 per second)
+  {"type": "level", "t_s": float, "db": float, "floor_db": float, "threshold_db": float, "speaking": bool}   (20/s;
+   t_s = stream time in seconds, same clock as an utterance's start_s / end_s / answer_s)
   {"type": "utterance", "start_s", "duration_s", "transcript", "emotion", "prob", "probs": {emotion: p},
-   "response", "e2e_ms", "endpoint_ms", "inference_ms", "asr_ms", "audio_ms", "true"?: str}
+   "response", "end_s", "answer_s", "e2e_ms", "endpoint_ms", "inference_ms", "asr_ms", "audio_ms", "true"?: str}
   {"type": "summary", "n", "e2e_p50_ms", "e2e_p95_ms", "inference_p50_ms", "matched"?: int, "scored"?: int}
 
 Pipeline = the M4 best configuration (Whisper on MPS in parallel with wav2vec2 on CPU,
@@ -200,17 +201,21 @@ class LiveSession:
             time.sleep(self.cfg.hangover + 1.0)
             self.stop()
 
+    def stream_seconds(self):
+        """How much audio has arrived so far, in seconds (the page's timeline clock)."""
+        return self.clock.ends[-1] / SR if self.clock.ends else 0.0
+
     def _level_ticker(self):
         silent_ticks, warned = 0, False
         while not self.stop_event.is_set():
-            time.sleep(0.1)
+            time.sleep(0.05)
             lvl, self._level = self._level, -120.0
             if self.cfg.source == "mic":  # all-zero input for 3 s: permission problem, say so once
                 silent_ticks = silent_ticks + 1 if lvl <= -119.9 else 0
-                if silent_ticks >= 30 and not warned:
+                if silent_ticks >= 60 and not warned:  # 3 s at 20 ticks/s
                     self.status("error", SILENT_MIC_MESSAGE)
                     warned = True
-            self.emit({"type": "level", "db": lvl, "floor_db": self.seg.noise_floor_db,
+            self.emit({"type": "level", "t_s": self.stream_seconds(), "db": lvl, "floor_db": self.seg.noise_floor_db,
                        "threshold_db": self.seg.current_threshold_db(), "speaking": self.seg._active})
 
     def _segmenter(self):
@@ -249,6 +254,7 @@ class LiveSession:
             r = {"type": "utterance", "start_s": s.start / SR, "duration_s": len(s.audio) / SR,
                  "transcript": transcript, "emotion": EMOTIONS[label], "prob": float(probs[label]),
                  "probs": {e: float(p) for e, p in zip(EMOTIONS, probs)}, "response": response,
+                 "end_s": s.end / SR, "answer_s": self.stream_seconds(),
                  "e2e_ms": (t_done - t_end) * 1e3, "endpoint_ms": (t_closed - t_end) * 1e3,
                  "inference_ms": (t_done - t0) * 1e3, "asr_ms": t_text * 1e3, "audio_ms": t_audio * 1e3}
             if self.truth:

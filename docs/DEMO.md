@@ -4,7 +4,7 @@
 .venv/bin/python demo.py --web
 ```
 
-This opens a local page at http://127.0.0.1:8765 (only reachable from this Mac) showing the input level against the room-noise floor and speech threshold, the latest emotion with all 7 probabilities, a latency chart that splits each utterance into *waiting for silence* and *model time*, and a history. Without `--web` the same information prints in the terminal. In web mode the page stays up after the session ends, until Ctrl+C.
+This opens a local page at http://127.0.0.1:8765 (only reachable from this Mac). The emotion of your latest sentence is the large word at the top. Below it, a **voice strip** scrolls through the last 15 seconds (9 on a phone): each sentence's bars and underline take its emotion's color, and an amber gap marks the time from when you stopped talking to when the answer appeared, labeled in ms. Under that: all 7 probabilities, a latency chart that splits each sentence into *waiting to be sure you stopped* and *model time*, and a history. Fonts (Fraunces, IBM Plex Sans; SIL Open Font License, files in `pipeline/live/web/fonts/`) are bundled so the page works offline. Without `--web` the same information prints in the terminal. In web mode the page stays up after the session ends, until Ctrl+C.
 
 1. The models load (about 10 s), then the demo asks you to **stay quiet for 1 second** while it measures the room noise. It prints the noise level and the resulting speech threshold.
 2. Speak a sentence, then pause. About 0.35 s after you stop, it prints what it heard, the emotion (with the runner-up), a response, and the latency.

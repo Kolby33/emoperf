@@ -10,10 +10,12 @@ late (or reloads) first receives the history so far, then live events.
 import json
 import queue
 import threading
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PAGE = Path(__file__).parent / "web" / "index.html"
+FONTS = Path(__file__).parent / "web" / "fonts"  # Fraunces + IBM Plex Sans (SIL OFL), served locally so the page works offline
 
 
 class EventHub:
@@ -21,12 +23,12 @@ class EventHub:
         self.lock = threading.Lock()
         self.subscribers = []
         self.history = []        # non-level events, replayed to new clients
-        self.last_level = None
+        self.recent_levels = deque(maxlen=400)  # last 20 s at 20/s, so a reloaded page can redraw the voice strip
 
     def publish(self, ev):
         with self.lock:
             if ev["type"] == "level":
-                self.last_level = ev
+                self.recent_levels.append(ev)
             else:
                 self.history.append(ev)
             subs = list(self.subscribers)
@@ -41,8 +43,8 @@ class EventHub:
         with self.lock:
             for ev in self.history:
                 q.put_nowait(ev)
-            if self.last_level is not None:  # so the meter's noise/threshold marks are right after a reload
-                q.put_nowait(self.last_level)
+            for ev in self.recent_levels:
+                q.put_nowait(ev)
             self.subscribers.append(q)
         return q
 
@@ -85,6 +87,20 @@ def make_handler(hub: EventHub):
                     pass
                 finally:
                     hub.unsubscribe(q)
+            elif self.path.startswith("/fonts/"):
+                name = self.path[len("/fonts/"):]
+                font = FONTS / name
+                # only plain file names from the fonts folder (no "..", no subfolders)
+                if "/" in name or not name.endswith(".woff2") or not font.is_file():
+                    self.send_error(404)
+                    return
+                body = font.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "font/woff2")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=86400")
+                self.end_headers()
+                self.wfile.write(body)
             else:
                 self.send_error(404)
 
