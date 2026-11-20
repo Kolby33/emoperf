@@ -152,4 +152,6 @@ MELD (Poria et al., ACL 2019; built on EmotionLines, Chen et al., 2018) is distr
 
 ## How this was built
 
-I wrote the project plan, including the goals, the constraints and the rule that every number must come from a real run, and made the decisions along the way. Claude Code, Anthropic's AI coding assistant, wrote most of the code and ran the experiments under that plan. I reviewed the results and the experiment log, tested the live demo and its web page with my own voice, and reported the problems I ran into.
+I used Claude Code, Anthropic's AI coding assistant, for most of the implementation. It wrote most of the code, ran the benchmarks and profiling sessions, and drafted the documentation, including this README.
+
+I wrote the project plan it worked from. The plan set the goals and the rules: report p50 and p95, check accuracy next to every speed number, keep failed experiments in the log, and put no number in the write-up that didn't come from a real run. I made the calls along the way, like moving the project from my Windows desktop to my MacBook, choosing which accuracy experiments to run, and adding the live demo and its web page. I tested the demo with my own voice and reported what broke, including a microphone that macOS was silently blocking. When I asked how to improve accuracy, the answer started with measuring where live accuracy is lost, and my question about whether 53% was any good is why the README compares against published MELD results.
